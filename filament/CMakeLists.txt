@@ -176,6 +176,7 @@ list(APPEND SRCS ${RESGEN_SOURCE})
 if (USE_EXTERNAL_GLES3)
     # Experimental feature; clients provide their own Context Manager.
 elseif (ANDROID)
+    list(APPEND SRCS src/driver/android/Choreographer.cpp)
     list(APPEND SRCS src/driver/android/ExternalStreamManagerAndroid.cpp)
     list(APPEND SRCS src/driver/android/ExternalTextureManagerAndroid.cpp)
     list(APPEND SRCS src/driver/android/VirtualMachineEnv.cpp)

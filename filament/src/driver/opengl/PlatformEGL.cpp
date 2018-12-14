@@ -29,6 +29,7 @@
 #include <utils/compiler.h>
 #include <utils/Log.h>
 
+#include "driver/android/Choreographer.h"
 #include "driver/android/ExternalTextureManagerAndroid.h"
 #include "driver/android/ExternalStreamManagerAndroid.h"
 #include "driver/android/VirtualMachineEnv.h"
@@ -119,7 +120,8 @@ static unordered_string_set split(const char* spacedList) {
 
 PlatformEGL::PlatformEGL() noexcept
         : mExternalStreamManager(ExternalStreamManagerAndroid::get()),
-          mExternalTextureManager(ExternalTextureManagerAndroid::get()) {
+          mExternalTextureManager(ExternalTextureManagerAndroid::get()),
+          mChoreographer(new Choreographer{}){
 }
 
 Driver* PlatformEGL::createDriver(void* sharedContext) noexcept {
@@ -283,6 +285,10 @@ Driver* PlatformEGL::createDriver(void* sharedContext) noexcept {
         goto error;
     }
 
+    if (mChoreographer->isValid()) {
+        mChoreographer->init();
+    }
+
     // success!!
     return OpenGLDriver::create(this, sharedContext);
 
@@ -314,6 +320,8 @@ EGLBoolean PlatformEGL::makeCurrent(EGLSurface drawSurface, EGLSurface readSurfa
 }
 
 void PlatformEGL::terminate() noexcept {
+    delete mChoreographer;
+    mChoreographer = nullptr;
     eglMakeCurrent(mEGLDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     eglDestroySurface(mEGLDisplay, mEGLDummySurface);
     eglDestroyContext(mEGLDisplay, mEGLContext);

@@ -32,6 +32,7 @@ namespace filament {
 class VirtualMachineEnv;
 class ExternalStreamManagerAndroid;
 class ExternalTextureManagerAndroid;
+class Choreographer;
 
 class PlatformEGL final : public driver::OpenGLPlatform {
 public:
@@ -80,6 +81,7 @@ private:
 
     ExternalStreamManagerAndroid& mExternalStreamManager;
     ExternalTextureManagerAndroid& mExternalTextureManager;
+    Choreographer* mChoreographer = nullptr;
 };
 
 } // namespace filament
