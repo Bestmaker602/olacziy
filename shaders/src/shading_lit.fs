@@ -99,6 +99,13 @@ void getPixelParams(const MaterialInputs material, out PixelParams pixel) {
     pixel.anisotropicB = normalize(cross(shading_tangentToWorld[2], pixel.anisotropicT));
 #endif
 
+#if defined(MATERIAL_HAS_SHEEN)
+    float sheenMix = pow5(1.0 - material.sheen);
+    pixel.sheen = material.sheen;
+    pixel.sheenColor = pixel.diffuseColor * (1.0 - sheenMix);
+    pixel.diffuseColor *= sheenMix;
+#endif
+
     // Pre-filtered DFG term used for image-based lighting
     pixel.dfg = prefilteredDFG(pixel.roughness, shading_NoV);
 

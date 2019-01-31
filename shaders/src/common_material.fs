@@ -75,6 +75,10 @@ struct MaterialInputs {
     float anisotropy;
     vec3  anisotropyDirection;
 
+#if defined(MATERIAL_HAS_SHEEN)
+    float sheen;
+#endif
+
 #if defined(SHADING_MODEL_SUBSURFACE)
     float thickness;
     float subsurfacePower;
@@ -116,6 +120,10 @@ void initMaterial(out MaterialInputs material) {
 #if defined(MATERIAL_HAS_ANISOTROPY)
     material.anisotropy = 0.0;
     material.anisotropyDirection = vec3(1.0, 0.0, 0.0);
+#endif
+
+#if defined(MATERIAL_HAS_SHEEN)
+    material.sheen = 0.0;
 #endif
 
 #if defined(SHADING_MODEL_SUBSURFACE)

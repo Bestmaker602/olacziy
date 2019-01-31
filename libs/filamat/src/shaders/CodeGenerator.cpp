@@ -498,6 +498,7 @@ char const* CodeGenerator::getConstantName(Property property) noexcept {
         case Property::SHEEN_COLOR:          return "SHEEN_COLOR";
         case Property::EMISSIVE:             return "EMISSIVE";
         case Property::NORMAL:               return "NORMAL";
+        case Property::SHEEN:                return "SHEEN";
     }
 }
 

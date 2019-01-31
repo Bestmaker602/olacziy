@@ -40,6 +40,11 @@ struct PixelParams {
     float anisotropy;
 #endif
 
+#if defined(MATERIAL_HAS_SHEEN)
+    vec3  sheenColor;
+    float sheen;
+#endif
+
 #if defined(SHADING_MODEL_SUBSURFACE)
     float thickness;
     vec3  subsurfaceColor;

@@ -293,6 +293,7 @@ static void gui(filament::Engine* engine, filament::View*) {
                     ImGui::SliderFloat("clearCoat", &params.clearCoat, 0.0f, 1.0f);
                     ImGui::SliderFloat("clearCoatRoughness", &params.clearCoatRoughness, 0.0f, 1.0f);
                     ImGui::SliderFloat("anisotropy", &params.anisotropy, -1.0f, 1.0f);
+                    ImGui::SliderFloat("sheen", &params.sheen, 0.0f, 1.0f);
                 }
                 if (params.currentMaterialModel == MATERIAL_MODEL_SUBSURFACE) {
                     ImGui::SliderFloat("thickness", &params.thickness, 0.0f, 1.0f);

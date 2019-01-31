@@ -372,6 +372,24 @@ TEST_F(MaterialCompiler, StaticCodeAnalyzerClearCoatNormal) {
     EXPECT_TRUE(PropertyListsMatch(expected, properties));
 }
 
+TEST_F(MaterialCompiler, StaticCodeAnalyzerSheen) {
+    std::string shaderCode(R"(
+        void material(inout MaterialInputs material) {
+            prepareMaterial(material);
+            material.sheen = vec3(1.0, 1.0, 1.0);
+        }
+    )");
+
+    filamat::MaterialBuilder builder = makeBuilder(shaderCode);
+    builder.shading(filamat::MaterialBuilder::Shading::LIT);
+    GLSLTools glslTools;
+    MaterialBuilder::PropertyList properties {false};
+    glslTools.findProperties(builder, properties);
+    MaterialBuilder::PropertyList expected {false};
+    expected[size_t(filamat::MaterialBuilder::Property::SHEEN)] = true;
+    EXPECT_TRUE(PropertyListsMatch(expected, properties));
+}
+
 TEST_F(MaterialCompiler, StaticCodeAnalyzerThickness) {
     std::string shaderCode(R"(
         void material(inout MaterialInputs material) {

@@ -29,6 +29,10 @@ material {
         {
             type : float,
             name : anisotropy
+        },
+        {
+            type : float,
+            name : sheen
         }
     ],
 }
@@ -43,5 +47,6 @@ fragment {
         material.clearCoat = materialParams.clearCoat;
         material.clearCoatRoughness = materialParams.clearCoatRoughness;
         material.anisotropy = materialParams.anisotropy;
+        material.sheen = materialParams.sheen;
     }
 }

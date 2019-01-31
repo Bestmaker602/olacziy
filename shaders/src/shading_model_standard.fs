@@ -1,6 +1,5 @@
 #if defined(MATERIAL_HAS_CLEAR_COAT)
 float clearCoatLobe(const PixelParams pixel, const vec3 h, float NoH, float LoH, out float Fcc) {
-
 #if defined(MATERIAL_HAS_NORMAL) || defined(MATERIAL_HAS_CLEAR_COAT_NORMAL)
     // If the material has a normal map, we want to use the geometric normal
     // instead to avoid applying the normal map details to the clear coat layer
@@ -16,6 +15,15 @@ float clearCoatLobe(const PixelParams pixel, const vec3 h, float NoH, float LoH,
 
     Fcc = F;
     return D * V * F;
+}
+#endif
+
+#if defined(MATERIAL_HAS_SHEEN)
+vec3 sheenLobe(const PixelParams pixel, float NoL, float NoH) {
+    float D = distributionCloth(pixel.sheen, NoH);
+    float V = visibilityCloth(shading_NoV, NoL);
+
+    return (D * V) * pixel.sheenColor;
 }
 #endif
 
@@ -100,6 +108,12 @@ vec3 surfaceShading(const PixelParams pixel, const Light light, float occlusion)
 
     vec3 Fr = specularLobe(pixel, light, h, NoV, NoL, NoH, LoH);
     vec3 Fd = diffuseLobe(pixel, NoV, NoL, LoH);
+
+#if defined(MATERIAL_HAS_SHEEN)
+    // Adding the sheen lobe to the specular lobe simplifies the handling of
+    // the clear coat layer and its attenuation down below
+    Fr += sheenLobe(pixel, NoL, NoH);
+#endif
 
 #if defined(MATERIAL_HAS_CLEAR_COAT)
     float Fcc;

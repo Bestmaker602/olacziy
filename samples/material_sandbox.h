@@ -58,6 +58,7 @@ struct SandboxParameters {
     float clearCoat = 0.0f;
     float clearCoatRoughness = 0.0f;
     float anisotropy = 0.0f;
+    float sheen = 0.0f;
     float thickness = 1.0f;
     float subsurfacePower = 12.234f;
     filament::sRGBColor subsurfaceColor = {0.0f};
@@ -151,6 +152,7 @@ inline filament::MaterialInstance* updateInstances(SandboxParameters& params,
         materialInstance->setParameter("clearCoat", params.clearCoat);
         materialInstance->setParameter("clearCoatRoughness", params.clearCoatRoughness);
         materialInstance->setParameter("anisotropy", params.anisotropy);
+        materialInstance->setParameter("sheen", params.sheen);
         if (params.currentBlending != BLENDING_OPAQUE) {
             materialInstance->setParameter("alpha", params.alpha);
         }

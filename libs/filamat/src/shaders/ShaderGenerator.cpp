@@ -63,6 +63,7 @@ static void generateMaterialDefines(std::ostream& os, const CodeGenerator& cg,
     cg.generateMaterialProperty(os, Property::SHEEN_COLOR,          properties[13]);
     cg.generateMaterialProperty(os, Property::EMISSIVE,             properties[14]);
     cg.generateMaterialProperty(os, Property::NORMAL,               properties[15]);
+    cg.generateMaterialProperty(os, Property::SHEEN,                properties[16]);
 }
 
 static void generateVertexDomain(const CodeGenerator& cg, std::stringstream& vs,

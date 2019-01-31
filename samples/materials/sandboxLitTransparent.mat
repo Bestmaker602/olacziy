@@ -34,6 +34,10 @@ material {
         {
             type : float,
             name : anisotropy
+        },
+        {
+            type : float,
+            name : sheen
         }
     ],
 }
@@ -41,13 +45,13 @@ material {
 fragment {
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
-        material.baseColor.rgb = materialParams.baseColor * materialParams.alpha;
-        material.baseColor.a = materialParams.alpha;
+        material.baseColor.rgb = materialParams.baseColor;
         material.roughness = materialParams.roughness;
         material.metallic = materialParams.metallic;
         material.reflectance = materialParams.reflectance;
         material.clearCoat = materialParams.clearCoat;
         material.clearCoatRoughness = materialParams.clearCoatRoughness;
         material.anisotropy = materialParams.anisotropy;
+        material.sheen = materialParams.sheen;
     }
 }
