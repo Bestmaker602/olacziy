@@ -1,0 +1,5 @@
+This folder was created as follows:
+
+curl -L -O https://github.com/jkuhlmann/cgltf/archive/bfd0a40.zip
+unzip bfd0a40.zip
+mv cgltf-* cgltf
