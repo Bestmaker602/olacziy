@@ -144,7 +144,7 @@ if (DEFINED RESGEN_SOURCE_FLAGS)
     set_source_files_properties(${RESGEN_SOURCE} PROPERTIES COMPILE_FLAGS ${RESGEN_SOURCE_FLAGS})
 endif()
 
-add_library(suzanne-resources ${DUMMY_SRC} ${RESGEN_SOURCE})
+add_library(embedded-resources ${DUMMY_SRC} ${RESGEN_SOURCE})
 
 # ==================================================================================================
 # Common library
@@ -233,10 +233,12 @@ if (NOT ANDROID)
     add_filamesh_demo(sample_cloth)
     add_filamesh_demo(sample_normal_map)
     add_filamesh_demo(suzanne)
+    add_filamesh_demo(showcase)
 
     # Sample app specific
     target_link_libraries(frame_generator PRIVATE imageio)
-    target_link_libraries(suzanne PRIVATE suzanne-resources)
+    target_link_libraries(suzanne PRIVATE embedded-resources)
+    target_link_libraries(showcase PRIVATE embedded-resources gltfio)
 endif()
 
 # ==================================================================================================

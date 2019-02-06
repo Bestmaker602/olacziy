@@ -72,6 +72,7 @@ public:
 
         Builder& geometry(size_t index, PrimitiveType type, VertexBuffer* vertices, IndexBuffer* indices) noexcept;
         Builder& geometry(size_t index, PrimitiveType type, VertexBuffer* vertices, IndexBuffer* indices, size_t offset, size_t count) noexcept;
+        // For an explanation of offset, count, minIndex, and maxIndex, look up the documentation for glDrawRangeElements.
         Builder& geometry(size_t index, PrimitiveType type, VertexBuffer* vertices, IndexBuffer* indices, size_t offset, size_t minIndex, size_t maxIndex, size_t count) noexcept;
         Builder& material(size_t index, MaterialInstance const* materialInstance) noexcept;
         // The axis aligned bounding box of the Renderable. Mandatory unless culling is disabled.
