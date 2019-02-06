@@ -201,7 +201,6 @@ function build_webgl_with_target {
             -DCMAKE_BUILD_TYPE=$1 \
             -DCMAKE_INSTALL_PREFIX=../webgl-${lc_target}/filament \
             -DWEBGL=1 \
-            ${JS_DOCS_OPTION} \
             ../..
         ${BUILD_COMMAND} ${BUILD_TARGETS}
         )
@@ -274,7 +273,7 @@ function build_android_target {
             -DCMAKE_BUILD_TYPE=$1 \
             -DCMAKE_INSTALL_PREFIX=../android-${LC_TARGET}/filament \
             -DCMAKE_TOOLCHAIN_FILE=../../build/toolchain-${ARCH}-linux-android.cmake \
-            ${VULKAN_ANDROID_OPTION} \
+            $VULKAN_ANDROID_OPTION \
             ../..
     fi
 

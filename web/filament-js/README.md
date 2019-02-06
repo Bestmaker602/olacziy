@@ -22,7 +22,7 @@ To publish a new package to npm, do the following.
 3. Edit the version number in `package.json`. You cannot publish the same version more than once.
 4. From the root folder in your Filament repo, do:
 ```
-./build.sh -ap webgl release
+./build.sh -lap webgl release
 ./build.sh -ap all release
 ```
 5. Make a commit and a tag whose label is the 3-tiered version number prefixed with a `v`:

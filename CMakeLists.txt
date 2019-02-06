@@ -486,6 +486,7 @@ set (FILAMENT_SAMPLES_BINARY_DIR ${PROJECT_BINARY_DIR}/samples)
 
 if (WEBGL)
     add_subdirectory(web/filament-js)
+    add_subdirectory(web/filamat-js)
     add_subdirectory(web/samples)
 
     if (GENERATE_JS_DOCS)
