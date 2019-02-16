@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef GLTFIO_BINDINGHELPER_H
-#define GLTFIO_BINDINGHELPER_H
+#ifndef GLTFIO_RESOURCELOADER_H
+#define GLTFIO_RESOURCELOADER_H
 
 #include <gltfio/FilamentAsset.h>
 
@@ -34,7 +34,7 @@ namespace details {
 class UrlCache;
 
 /**
- * BindingHelper asynchronously uploads vertex buffers and textures to the GPU and computes
+ * ResourceLoader asynchronously uploads vertex buffers and textures to the GPU and computes
  * surface orientation quaternions.
  *
  * For a usage example, see the comment block for AssetLoader.
@@ -50,10 +50,10 @@ class UrlCache;
  * TODO: the GPU upload is asynchronous but the load-from-disk and image decode is not.
  * TODO: using this class is required for proper tangent quaternions, ideally it would be optional.
  */
-class BindingHelper {
+class ResourceLoader {
 public:
-    BindingHelper(filament::Engine* engine, const char* basePath);
-    ~BindingHelper();
+    ResourceLoader(filament::Engine* engine, const char* basePath);
+    ~ResourceLoader();
     bool loadResources(FilamentAsset* asset);
 private:
     bool isBase64(const BufferBinding& bb);
@@ -68,5 +68,5 @@ private:
 
 } // namespace gltfio
 
-#endif // GLTFIO_BINDINGHELPER_H
+#endif // GLTFIO_RESOURCELOADER_H
 

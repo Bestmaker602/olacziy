@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <gltfio/BindingHelper.h>
+#include <gltfio/ResourceLoader.h>
 
 #include "FFilamentAsset.h"
 #include "upcast.h"
@@ -35,7 +35,7 @@
 
 #include <string>
 
-// TODO: to simplify the implementation of BindingHelper, we are using cgltf_load_buffer_base64 and
+// TODO: to simplify the implementation of ResourceLoader, we are using cgltf_load_buffer_base64 and
 // cgltf_load_buffer_file, which are normally private to the library. We should consider
 // substituting these functions with our own implementation since they are fairly simple.
 
@@ -73,7 +73,7 @@ public:
     }
 
     // Destroy the URL cache only after the pending upload count is zero and the client has
-    // destroyed the BindingHelper object.
+    // destroyed the ResourceLoader object.
     static void onLoadedResource(void* buffer, size_t size, void* user) {
         auto cache = (UrlCache*) user;
         if (--cache->mPendingUploads == 0 && cache->mOwnerDestroyed) {
@@ -95,14 +95,14 @@ private:
     tsl::robin_map<std::string, void*> mBlobs; // TODO: can we simply use const char* for the key?
 };
 
-BindingHelper::BindingHelper(Engine* engine, const char* basePath) : mEngine(engine),
+ResourceLoader::ResourceLoader(Engine* engine, const char* basePath) : mEngine(engine),
         mBasePath(basePath), mCache(new UrlCache) {}
 
-BindingHelper::~BindingHelper() {
+ResourceLoader::~ResourceLoader() {
     mCache->onOwnerDestroyed();
 }
 
-bool BindingHelper::loadResources(FilamentAsset* asset) {
+bool ResourceLoader::loadResources(FilamentAsset* asset) {
     const BufferBinding* bindings = asset->getBufferBindings();
     for (size_t i = 0, n = asset->getBufferBindingCount(); i < n; ++i) {
         auto bb = bindings[i];
@@ -145,7 +145,7 @@ bool BindingHelper::loadResources(FilamentAsset* asset) {
     return true;
 }
 
-bool BindingHelper::isBase64(const BufferBinding& bb) {
+bool ResourceLoader::isBase64(const BufferBinding& bb) {
    if (bb.uri && strncmp(bb.uri, "data:", 5) == 0) {
         const char* comma = strchr(bb.uri, ',');
         if (comma && comma - bb.uri >= 7 && strncmp(comma - 7, ";base64", 7) == 0) {
@@ -155,7 +155,7 @@ bool BindingHelper::isBase64(const BufferBinding& bb) {
     return false;
 }
 
-void* BindingHelper::loadBase64(const BufferBinding& bb) {
+void* ResourceLoader::loadBase64(const BufferBinding& bb) {
     if (!bb.uri || strncmp(bb.uri, "data:", 5)) {
         return nullptr;
     }
@@ -174,11 +174,11 @@ void* BindingHelper::loadBase64(const BufferBinding& bb) {
     return nullptr;
 }
 
-bool BindingHelper::isFile(const BufferBinding& bb) {
+bool ResourceLoader::isFile(const BufferBinding& bb) {
     return strstr(bb.uri, "://") == nullptr;
 }
 
-void* BindingHelper::loadFile(const BufferBinding& bb) {
+void* ResourceLoader::loadFile(const BufferBinding& bb) {
     cgltf_options options {};
     void* data = nullptr;
     cgltf_result result = cgltf_load_buffer_file(
@@ -190,7 +190,7 @@ void* BindingHelper::loadFile(const BufferBinding& bb) {
     return data;
 }
 
-void BindingHelper::computeTangents(const FFilamentAsset* asset) {
+void ResourceLoader::computeTangents(const FFilamentAsset* asset) {
     const auto& nodeMap = asset->mNodeMap;
 
     UrlMap blobs; // TODO: can the key be const char* ?

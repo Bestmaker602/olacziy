@@ -18,6 +18,7 @@
 #define GLTFIO_FFILAMENTASSET_H
 
 #include <gltfio/FilamentAsset.h>
+#include <gltfio/Animator.h>
 
 #include <filament/Engine.h>
 #include <filament/MaterialInstance.h>
@@ -55,6 +56,7 @@ struct FFilamentAsset : public FilamentAsset {
 
     ~FFilamentAsset() {
         releaseSourceData();
+        delete mAnimator;
         mEngine->destroy(mRoot);
         for (auto entity : mEntities) {
             mEngine->destroy(entity);
@@ -104,6 +106,13 @@ struct FFilamentAsset : public FilamentAsset {
         return mBoundingBox;
     }
 
+    Animator* createAnimator() noexcept {
+        if (!mAnimator) {
+            mAnimator = new Animator(this);
+        }
+        return mAnimator;
+    }
+
     void releaseSourceData() noexcept {
         mBufferBindings.clear();
         mBufferBindings.shrink_to_fit();
@@ -124,6 +133,7 @@ struct FFilamentAsset : public FilamentAsset {
     filament::Aabb mBoundingBox;
     utils::Entity mRoot;
     std::vector<Skin> mSkins;
+    Animator* mAnimator = nullptr;
 
     /** @{
      * Transient source data that can freed via releaseSourceData(). */

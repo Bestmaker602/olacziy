@@ -18,7 +18,6 @@
 
 #include <filament/Engine.h>
 #include <filament/IndirectLight.h>
-#include <filament/LightManager.h>
 #include <filament/RenderableManager.h>
 #include <filament/Scene.h>
 #include <filament/TransformManager.h>
@@ -26,10 +25,10 @@
 
 #include <filameshio/MeshReader.h>
 
-#include <gltfio/AnimationHelper.h>
+#include <gltfio/Animator.h>
 #include <gltfio/AssetLoader.h>
 #include <gltfio/FilamentAsset.h>
-#include <gltfio/BindingHelper.h>
+#include <gltfio/ResourceLoader.h>
 
 #include "app/Config.h"
 #include "app/FilamentApp.h"
@@ -38,7 +37,6 @@
 #include <getopt/getopt.h>
 
 #include <fstream>
-#include <iomanip>
 #include <iostream>
 
 #include "generated/resources/resources.h"
@@ -54,7 +52,7 @@ struct App {
     Config config;
     AssetLoader* loader;
     FilamentAsset* asset;
-    AnimationHelper* animation;
+    Animator* animator;
     bool shadowPlane = false;
 };
 
@@ -189,13 +187,13 @@ int main(int argc, char** argv) {
 
         // Load external textures and buffers.
         utils::Path assetFolder = filename.getParent();
-        gltfio::BindingHelper(engine, assetFolder.c_str()).loadResources(app.asset);
+        gltfio::ResourceLoader(engine, assetFolder.c_str()).loadResources(app.asset);
 
-        // Load animation data.
-        app.animation = new AnimationHelper(app.asset);
+        // Load animation data then free the source hierarchy.
+        app.animator = app.asset->createAnimator();
         app.asset->releaseSourceData();
 
-        // Add renderables and lights. This also adds transform-only entities that get ignored.
+        // Add renderables. This also adds transform-only entities that get ignored.
         scene->addEntities(app.asset->getEntities(), app.asset->getEntityCount());
     };
 
@@ -207,10 +205,10 @@ int main(int argc, char** argv) {
     };
 
     auto animate = [&app](Engine* engine, View*, double now) {
-        if (app.animation->getAnimationCount() > 0) {
-            app.animation->applyAnimation(0, now);
+        if (app.animator->getAnimationCount() > 0) {
+            app.animator->applyAnimation(0, now);
         }
-        app.animation->updateBoneMatrices();
+        app.animator->updateBoneMatrices();
     };
 
     FilamentApp& filamentApp = FilamentApp::get();

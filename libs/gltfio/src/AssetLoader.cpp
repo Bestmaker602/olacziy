@@ -400,7 +400,7 @@ bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* out
             continue;
         }
 
-        // The glTF tangent data is mostly ignored here, but honored in BindingHelper.
+        // The glTF tangent data is mostly ignored here, but honored in ResourceLoader.
         if (inputAttribute.type == cgltf_attribute_type_tangent) {
             continue;
         }

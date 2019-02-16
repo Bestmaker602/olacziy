@@ -63,6 +63,10 @@ filament::Aabb FilamentAsset::getBoundingBox() const noexcept {
     return upcast(this)->getBoundingBox();
 }
 
+Animator* FilamentAsset::createAnimator() noexcept {
+    return upcast(this)->createAnimator();
+}
+
 void FilamentAsset::releaseSourceData() noexcept {
     return upcast(this)->releaseSourceData();
 }

@@ -33,6 +33,7 @@ namespace gltfio {
 
 struct BufferBinding;
 struct TextureBinding;
+class Animator;
 
 /**
  * FilamentAsset owns a bundle of Filament objects that have been created by AssetLoader.
@@ -40,12 +41,12 @@ struct TextureBinding;
  * For usage instructions, see the comment block for AssetLoader.
  *
  * This class holds strong references to entities (renderables and transforms) that have been loaded
- * from a glTF asset, as well as strong references to VertexBuffer, IndexBuffer, and
- * MaterialInstance.
+ * from a glTF asset, as well as strong references to VertexBuffer, IndexBuffer, MaterialInstance,
+ * and, optionally, an animation engine.
  *
  * Clients must iterate over texture uri's and create Texture objects, unless the asset was loaded
  * from a GLB file. Clients should also iterate over buffer uri's and call VertexBuffer::setBufferAt
- * and IndexBuffer::setBuffer as needed. See BindingHelper to simplify this process.
+ * and IndexBuffer::setBuffer as needed. See ResourceLoader to simplify this process.
  *
  * TODO: This supports skinning but not morphing.
  * TODO: Only the default glTF scene is loaded, other glTF scenes are ignored.
@@ -79,11 +80,14 @@ public:
     /** Gets the bounding box computed from the supplied min / max values in glTF accessors. */
     filament::Aabb getBoundingBox() const noexcept;
 
+    /** Creates the animation engine or returns it from the cache. */
+    Animator* createAnimator() noexcept;
+
     /**
      * Reclaims CPU-side memory for URI strings, binding lists, and raw animation data.
      *
-     * If using BindingHelper, clients should call this only after calling loadResources.
-     * If using AnimationHelper, clients should call this only after constructing the helper object.
+     * If using ResourceLoader, clients should call this only after calling loadResources.
+     * If using Animator, clients should call this only after calling createAnimator.
      */
     void releaseSourceData() noexcept;
 
@@ -110,10 +114,10 @@ public:
  *  (d) One memcpy into an animation buffer.
  *
  * Orientation buffers are blobs of CPU-side memory that hold normals and possibly tangents. These
- * are consumed by the BindingHelper class, which calls populateTangentQuaternions.
+ * are consumed by the ResourceLoader class, which calls populateTangentQuaternions.
  *
  * Similarly, animation buffers are blobs of CPU memory that hold keyframe values. These are
- * consumed by the AnimationHelper class.
+ * consumed by the Animator class.
  */
 struct BufferBinding {
     const char* uri;    // unique identifier for the source blob

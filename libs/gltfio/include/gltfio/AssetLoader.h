@@ -30,14 +30,15 @@ namespace gltfio {
  * AssetLoader consumes a blob of glTF 2.0 content (either JSON or GLB) and produces an "asset",
  * which is a bundle of Filament entities, material instances, vertex buffers, and index buffers.
  *
- * For JSON-based content, the loader does not fetch external buffer data or image data. Clients can
- * obtain the URI list from the asset or use the provided BindingHelper class.
+ * For JSON-based content, AssetLoader does not fetch external buffer data or image data. Clients
+ * can use the provided ResourceLoader class for this, which obtains the URI list from the asset.
+ * This is demonstrated in the code snippet below.
  *
  * The loader also owns a cache of Material objects that may be re-used across multiple loads.
  *
  * TODO: currently the loader uses filamat to generate materials on the fly, but we may wish to
- * allow clients to load a small set of precompiled ubershader materials, in order to avoid the
- * filamat library on resource-constrained platforms.
+ * allow clients to load a small set of precompiled ubershader materials to avoid the
+ * footprint of the filamat library on resource-constrained platforms.
  *
  * Example usage:
  *
@@ -51,10 +52,10 @@ namespace gltfio {
  * content.clear();
  *
  * // Load buffer data and textures from disk.
- * BindingHelper(engine, ".").loadResources(asset);
+ * ResourceLoader(engine, ".").loadResources(asset);
  *
  * // Create the simple animation engine.
- * AnimationHelper animation(asset);
+ * Animator* animator = asset->createAnimator();
  *
  * // Free the glTF hierarchy as it is no longer needed.
  * asset->releaseSourceData();
@@ -64,8 +65,8 @@ namespace gltfio {
  *
  * // Execute the render loop and play the first animation.
  * do {
- *      animation.applyAnimation(0, time);
- *      animation.updateBoneMatrices();
+ *      animator->applyAnimation(0, time);
+ *      animator->updateBoneMatrices();
  *      if (renderer->beginFrame(swapChain)) {
  *          renderer->render(view);
  *          renderer->endFrame();

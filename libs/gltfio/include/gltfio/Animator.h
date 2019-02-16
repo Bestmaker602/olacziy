@@ -14,17 +14,19 @@
  * limitations under the License.
  */
 
-#ifndef GLTFIO_ANIMATIONHELPER_H
-#define GLTFIO_ANIMATIONHELPER_H
+#ifndef GLTFIO_ANIMATOR_H
+#define GLTFIO_ANIMATOR_H
 
 #include <gltfio/FilamentAsset.h>
 
 namespace gltfio {
 
+namespace details { class FFilamentAsset; }
+
 struct AnimationImpl;
 
 /**
- * AnimationHelper can be used for two things: (1) updating matrices in Transform components
+ * Animator can be used for two things: (1) updating matrices in Transform components
  * according to glTF animation definitions and (2) updating bone matrices in Renderable components
  * according to glTF skin definitions.
  *
@@ -32,11 +34,8 @@ struct AnimationImpl;
  *
  * TODO: add support for morphing.
  */
-class AnimationHelper {
+class Animator {
 public:
-    AnimationHelper(FilamentAsset* asset);
-    ~AnimationHelper();
-
     /**
      * Uses TransformManager to apply rotation, translation, and scale to entities that have
      * been targeted by the given animation definition.
@@ -47,7 +46,7 @@ public:
      * Asks TransformManager to compute root-to-node transforms for all bone nodes, then passes
      * the results into RenderableManager::setBones.
      *
-     * Note that this operation is actually independent of animation, but the AnimationHelper seems
+     * Note that this operation is actually independent of animation, but the Animator seems
      * like a reasonable place for a utility like this.
      */
     void updateBoneMatrices();
@@ -57,9 +56,12 @@ public:
     const char* getAnimationName(size_t animationIndex) const;
 
 private:
-    AnimationImpl* mImpl;
+    friend class details::FFilamentAsset;
+    Animator(FilamentAsset* asset);
+    ~Animator();
+    AnimationImpl* mImpl; // TODO: move to FFilamentAsset
 };
 
 } // namespace gltfio
 
-#endif // GLTFIO_ANIMATIONHELPER_H
+#endif // GLTFIO_ANIMATOR_H

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include <gltfio/AnimationHelper.h>
+#include <gltfio/Animator.h>
 
 #include "FFilamentAsset.h"
 #include "upcast.h"
@@ -190,7 +190,7 @@ static void setTransformType(const cgltf_animation_channel& src, Channel& dst) {
     }
 }
 
-AnimationHelper::AnimationHelper(FilamentAsset* publicAsset) {
+Animator::Animator(FilamentAsset* publicAsset) {
     mImpl = new AnimationImpl();
     FFilamentAsset* asset = mImpl->asset = upcast(publicAsset);
     mImpl->renderableManager = &asset->mEngine->getRenderableManager();
@@ -242,15 +242,15 @@ AnimationHelper::AnimationHelper(FilamentAsset* publicAsset) {
     }
 }
 
-AnimationHelper::~AnimationHelper() {
+Animator::~Animator() {
     delete mImpl;
 }
 
-size_t AnimationHelper::getAnimationCount() const {
+size_t Animator::getAnimationCount() const {
     return mImpl->animations.size();
 }
 
-void AnimationHelper::applyAnimation(size_t animationIndex, float time) const {
+void Animator::applyAnimation(size_t animationIndex, float time) const {
     const Animation& anim = mImpl->animations[animationIndex];
     time = fmod(time, anim.duration);
     for (const auto& channel : anim.channels) {
@@ -314,7 +314,7 @@ void AnimationHelper::applyAnimation(size_t animationIndex, float time) const {
     }
 }
 
-void AnimationHelper::updateBoneMatrices() {
+void Animator::updateBoneMatrices() {
     vector<mat4f> boneMatrices;
     FFilamentAsset* asset = mImpl->asset;
     for (const auto& skin : asset->mSkins) {
@@ -334,11 +334,11 @@ void AnimationHelper::updateBoneMatrices() {
     }
 }
 
-float AnimationHelper::getAnimationDuration(size_t animationIndex) const {
+float Animator::getAnimationDuration(size_t animationIndex) const {
     return mImpl->animations[animationIndex].duration;
 }
 
-const char* AnimationHelper::getAnimationName(size_t animationIndex) const {
+const char* Animator::getAnimationName(size_t animationIndex) const {
     return mImpl->animations[animationIndex].name.c_str();
 }
 
