@@ -30,7 +30,7 @@ struct AnimationImpl;
  *
  * For a usage example, see the comment block for AssetLoader.
  *
- * TODO: this supports skinning but not morphing.
+ * TODO: add support for morphing.
  */
 class AnimationHelper {
 public:
@@ -39,7 +39,7 @@ public:
 
     /**
      * Uses TransformManager to apply rotation, translation, and scale to entities that have
-     * been targeted by a given animation definitions.
+     * been targeted by the given animation definition.
      */
     void applyAnimation(size_t animationIndex, float time) const;
 

@@ -27,10 +27,15 @@ namespace filament {
 
 namespace gltfio {
 
+namespace details {
+    class FFilamentAsset;
+}
+
 class UrlCache;
 
 /**
- * BindingHelper asynchronously uploads vertex buffers and textures to the GPU.
+ * BindingHelper asynchronously uploads vertex buffers and textures to the GPU and computes
+ * surface orientation quaternions.
  *
  * For a usage example, see the comment block for AssetLoader.
  *
@@ -43,6 +48,7 @@ class UrlCache;
  * BufferDescriptor callbacks in order to determine when to free CPU-side data blobs.
  *
  * TODO: the GPU upload is asynchronous but the load-from-disk and image decode is not.
+ * TODO: using this class is required for proper tangent quaternions, ideally it would be optional.
  */
 class BindingHelper {
 public:
@@ -54,6 +60,7 @@ private:
     bool isFile(const BufferBinding& bb);
     void* loadBase64(const BufferBinding& bb);
     void* loadFile(const BufferBinding& bb);
+    void computeTangents(const details::FFilamentAsset* asset);
     UrlCache* mCache;
     filament::Engine* mEngine;
     utils::Path mBasePath;

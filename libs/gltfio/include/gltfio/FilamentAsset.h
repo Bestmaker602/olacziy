@@ -31,41 +31,8 @@ namespace filament {
 
 namespace gltfio {
 
-/**
- * BufferBinding is a read-only structure that tells clients how to load a source blob into a
- * VertexBuffer, IndexBuffer, or "animation buffer".
- *
- * Each binding instance corresponds to one of the following:
- *
- *  (a) One call to VertexBuffer::setBufferAt().
- *  (b) One call to IndexBuffer::setBuffer().
- *  (c) One memcpy into an animation buffer.
- *
- * Animation buffers are blobs of opaque CPU-side memory that hold keyframe values. These are
- * consumed by the AnimationHelper class.
- */
-struct BufferBinding {
-    const char* uri;    // unique identifier for the source blob
-    uint32_t totalSize; // size in bytes of the source blob at the given URI
-
-    int bufferIndex; // only used when the destination is a VertexBuffer
-    uint32_t offset; // byte count used only for vertex and index buffers
-    uint32_t size;   // byte count used only for vertex and index buffers
-
-    // Only one of the following destinations can be non-null.
-    filament::VertexBuffer* vertexBuffer;
-    filament::IndexBuffer* indexBuffer;
-    uint8_t* animationBuffer;
-};
-
-/** Describes a binding from a Texture to a MaterialInstance. */
-struct TextureBinding {
-    const char* uri;
-    const char* mimeType;
-    filament::MaterialInstance* materialInstance;
-    const char* materialParameter;
-    filament::TextureSampler sampler;
-};
+struct BufferBinding;
+struct TextureBinding;
 
 /**
  * FilamentAsset owns a bundle of Filament objects that have been created by AssetLoader.
@@ -129,6 +96,47 @@ public:
     FilamentAsset(FilamentAsset&&) = delete;
     FilamentAsset& operator=(FilamentAsset const&) = delete;
     FilamentAsset& operator=(FilamentAsset&&) = delete;
+};
+
+/**
+ * BufferBinding is a read-only structure that tells clients how to load a source blob into a
+ * VertexBuffer slot, IndexBuffer, orientation buffer, or animation buffer.
+ *
+ * Each binding instance corresponds to one of the following:
+ *
+ *  (a) One call to VertexBuffer::setBufferAt().
+ *  (b) One call to IndexBuffer::setBuffer().
+ *  (c) One memcpy into an orientation buffer.
+ *  (d) One memcpy into an animation buffer.
+ *
+ * Orientation buffers are blobs of CPU-side memory that hold normals and possibly tangents. These
+ * are consumed by the BindingHelper class, which calls populateTangentQuaternions.
+ *
+ * Similarly, animation buffers are blobs of CPU memory that hold keyframe values. These are
+ * consumed by the AnimationHelper class.
+ */
+struct BufferBinding {
+    const char* uri;    // unique identifier for the source blob
+    uint32_t totalSize; // size in bytes of the source blob at the given URI
+
+    int bufferIndex; // only used when the destination is a VertexBuffer
+    uint32_t offset; // byte count used only for vertex and index buffers
+    uint32_t size;   // byte count used only for vertex and index buffers
+
+    // Only one of the following destinations can be non-null.
+    filament::VertexBuffer* vertexBuffer;
+    filament::IndexBuffer* indexBuffer;
+    uint8_t* orientationBuffer;
+    uint8_t* animationBuffer;
+};
+
+/** Describes a binding from a Texture to a MaterialInstance. */
+struct TextureBinding {
+    const char* uri;
+    const char* mimeType;
+    filament::MaterialInstance* materialInstance;
+    const char* materialParameter;
+    filament::TextureSampler sampler;
 };
 
 } // namespace gltfio

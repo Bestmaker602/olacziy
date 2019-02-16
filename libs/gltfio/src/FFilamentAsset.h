@@ -111,6 +111,8 @@ struct FFilamentAsset : public FilamentAsset {
         mTextureBindings.shrink_to_fit();
         mAnimationBuffer.clear();
         mAnimationBuffer.shrink_to_fit();
+        mOrientationBuffer.clear();
+        mOrientationBuffer.shrink_to_fit();
         cgltf_free((cgltf_data*) mSourceAsset);
         mSourceAsset = nullptr;
         mNodeMap.clear();
@@ -128,6 +130,7 @@ struct FFilamentAsset : public FilamentAsset {
     std::vector<BufferBinding> mBufferBindings;
     std::vector<TextureBinding> mTextureBindings;
     std::vector<uint8_t> mAnimationBuffer;
+    std::vector<uint8_t> mOrientationBuffer;
     const cgltf_data* mSourceAsset = nullptr;
     tsl::robin_map<const cgltf_node*, utils::Entity> mNodeMap;
     /** @} */

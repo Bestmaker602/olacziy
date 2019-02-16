@@ -129,6 +129,7 @@ struct FAssetLoader : public AssetLoader {
     void addTextureBinding(MaterialInstance* materialInstance, const char* parameterName,
             const cgltf_texture* srcTexture);
     void createAnimationBuffer();
+    void createOrientationBuffer();
     void importSkinningData(Skin& dstSkin, const cgltf_skin& srcSkin);
 
     bool mCastShadows = true;
@@ -182,7 +183,7 @@ void FAssetLoader::createAsset(const cgltf_data* srcAsset) {
 
     // If there is no default scene specified, then the default is the first one.
     // It is not an error for a glTF file to have zero scenes.
-    cgltf_scene* scene = srcAsset->scene ? srcAsset->scene : srcAsset->scenes;
+    const cgltf_scene* scene = srcAsset->scene ? srcAsset->scene : srcAsset->scenes;
     if (!scene) {
         return;
     }
@@ -206,6 +207,10 @@ void FAssetLoader::createAsset(const cgltf_data* srcAsset) {
     // Find all sampler buffers and create buffer bindings for them so that they aggregate
     // into a single CPU-side "animation buffer".
     createAnimationBuffer();
+
+    // Find all primitives with normals (and, optionally, tangents) and create buffer bindings for
+    // them so that they aggregate into a single CPU-side "orientation buffer".
+    createOrientationBuffer();
 
     // Copy over joint lists (references to TransformManager components) and create buffer bindings
     // for inverseBindMatrices.
@@ -376,16 +381,35 @@ bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* out
         .size = computeBindingSize(indicesAccessor), 
     });
 
+    // We do not necessarily upload all glTF attribute buffers to the GPU. For example, we
+    // do not upload tangent vectors in their source format. However the buffer count that
+    // gets passed to the Builder should be equal to the glTF attribute count since unused buffers
+    // might occur in a middle slot and we do not remap the slots.
+    // TODO: discard texture coordinates past the second set.
     VertexBuffer::Builder vbb;
     vbb.bufferCount(inPrim->attributes_count);
-    for (int attr = 0; attr < inPrim->attributes_count; attr++) {
-        const cgltf_attribute& inputAttribute = inPrim->attributes[attr];
+
+    for (int slot = 0; slot < inPrim->attributes_count; slot++) {
+        const cgltf_attribute& inputAttribute = inPrim->attributes[slot];
         const cgltf_accessor* inputAccessor = inputAttribute.data;
+
+        // At a minimum, surface orientation requires normals to be present in the source data.
+        // Here we re-purpose the normals slot to point to the quats that get computed later.
+        if (inputAttribute.type == cgltf_attribute_type_normal) {
+            vbb.attribute(VertexAttribute::TANGENTS, slot, VertexBuffer::AttributeType::HALF4);
+            continue;
+        }
+
+        // The glTF tangent data is mostly ignored here, but honored in BindingHelper.
+        if (inputAttribute.type == cgltf_attribute_type_tangent) {
+            continue;
+        }
 
         // This will needlessly set the same vertex count multiple times, which should be fine.
         vbb.vertexCount(inputAccessor->count);
 
-        // The positions accessor is required to have min/max properties.
+        // The positions accessor is required to have min/max properties, use them to expand
+        // the bounding box for this primitive.
         if (inputAttribute.type == cgltf_attribute_type_position) {
             const float* minp = &inputAccessor->min[0];
             const float* maxp = &inputAccessor->max[0];
@@ -393,16 +417,9 @@ bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* out
             outPrim->aabb.max = max(outPrim->aabb.max, float3(maxp[0], maxp[1], maxp[2]));
         }
 
-        if (inputAttribute.type == cgltf_attribute_type_normal ||
-                inputAttribute.type == cgltf_attribute_type_tangent) {
-            // TODO: supply TANGENTS
-            slog.w << "Tangents not yet implemented." << io::endl;
-            continue;
-        }
-
-        VertexAttribute attrType;
-        if (!getVertexAttrType(inputAttribute.type, &attrType)) {
-            utils::slog.e << "Unrecognized vertex attribute." << utils::io::endl;
+        VertexAttribute semantic;
+        if (!getVertexAttrType(inputAttribute.type, &semantic)) {
+            utils::slog.e << "Unrecognized vertex semantic." << utils::io::endl;
             return false;
         }
         VertexBuffer::AttributeType atype;
@@ -418,28 +435,29 @@ bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* out
 
         // The cgltf library provides a stride value for all accessors, even though they do not
         // exist in the glTF file. It is computed from the type and the stride of the buffer view.
-        // As a convenience cgltf also replaces zero (default) stride with the actual stride.
-        vbb.attribute(attrType, attr, atype, 0, inputAccessor->stride);
+        // As a convenience, cgltf also replaces zero (default) stride with the actual stride.
+        vbb.attribute(semantic, slot, atype, 0, inputAccessor->stride);
 
         if (inputAccessor->normalized) {
-            vbb.normalized(attrType);
+            vbb.normalized(semantic);
         }
     }
+
     VertexBuffer* vertices = vbb.build(*mEngine);
 
-    for (int attr = 0; attr < inPrim->attributes_count; attr++) {
-        const cgltf_attribute& inputAttribute = inPrim->attributes[attr];
+    for (int slot = 0; slot < inPrim->attributes_count; slot++) {
+        const cgltf_attribute& inputAttribute = inPrim->attributes[slot];
         const cgltf_accessor* inputAccessor = inputAttribute.data;
+        const cgltf_buffer_view* bv = inputAccessor->buffer_view;
         if (inputAttribute.type == cgltf_attribute_type_normal ||
                 inputAttribute.type == cgltf_attribute_type_tangent) {
             continue;
         }
-        const cgltf_buffer_view* bv = inputAccessor->buffer_view;
         mResult->mBufferBindings.emplace_back(BufferBinding {
             .uri = bv->buffer->uri,
             .totalSize = (uint32_t) bv->buffer->size,
             .vertexBuffer = vertices,
-            .bufferIndex = attr,
+            .bufferIndex = slot,
             .offset = computeBindingOffset(inputAccessor),
             .size = computeBindingSize(inputAccessor)
         });
@@ -557,35 +575,79 @@ void FAssetLoader::addTextureBinding(MaterialInstance* materialInstance, const c
 
 void FAssetLoader::createAnimationBuffer() {
     const cgltf_data* srcAsset = mResult->mSourceAsset;
-    tsl::robin_set<const cgltf_buffer*> animbuffers;
+    tsl::robin_set<const cgltf_buffer*> srcBuffers;
 
     // Find the set of all sampler buffers.
     const cgltf_animation* anims = srcAsset->animations;
     for (cgltf_size i = 0, len = srcAsset->animations_count; i < len; ++i) {
         const cgltf_animation_sampler* samplers = anims[i].samplers;
         for (cgltf_size j = 0, nsamps = anims[i].samplers_count; j < nsamps; ++j) {
-            animbuffers.insert(samplers[j].input->buffer_view->buffer);
-            animbuffers.insert(samplers[j].output->buffer_view->buffer);
+            srcBuffers.insert(samplers[j].input->buffer_view->buffer);
+            srcBuffers.insert(samplers[j].output->buffer_view->buffer);
         }
     }
 
     // Allocate a monolithic CPU-side buffer for holding keyframe values.
-    uint32_t animsize = 0;
-    for (auto buffer : animbuffers) {
-        animsize += buffer->size;
+    uint32_t total = 0;
+    for (auto buffer : srcBuffers) {
+        total += buffer->size;
     }
-    mResult->mAnimationBuffer.resize(animsize);
-    uint8_t* dstbuffer = mResult->mAnimationBuffer.data();
+    mResult->mAnimationBuffer.resize(total);
+    uint8_t* dstBuffer = mResult->mAnimationBuffer.data();
 
     // Add bindings that copy an entire source blob into a region within the animation buffer.
-    for (auto srcbuffer : animbuffers) {
+    for (auto srcBuffer : srcBuffers) {
         mResult->mBufferBindings.emplace_back(BufferBinding {
-            .uri = srcbuffer->uri,
-            .size = uint32_t(srcbuffer->size),
-            .totalSize = uint32_t(srcbuffer->size),
-            .animationBuffer = dstbuffer
+            .uri = srcBuffer->uri,
+            .size = uint32_t(srcBuffer->size),
+            .totalSize = uint32_t(srcBuffer->size),
+            .animationBuffer = dstBuffer
         });
-        dstbuffer += srcbuffer->size;
+        dstBuffer += srcBuffer->size;
+    }
+}
+
+void FAssetLoader::createOrientationBuffer() {
+    tsl::robin_set<const cgltf_buffer*> srcBuffers;
+
+    // Find the set of all buffers that hold normals or tangents.
+    auto gatherOrientationData = [&srcBuffers](const cgltf_primitive& prim) {
+        for (cgltf_size slot = 0; slot < prim.attributes_count; slot++) {
+            const cgltf_attribute& attr = prim.attributes[slot];
+            if (attr.type == cgltf_attribute_type_tangent ||
+                    attr.type == cgltf_attribute_type_normal) {
+                srcBuffers.insert(attr.data->buffer_view->buffer);
+                continue;
+            }
+        }
+    };
+    for (auto iter : mResult->mNodeMap) {
+        const cgltf_mesh* mesh = iter.first->mesh;
+        if (mesh) {
+            cgltf_size nprims = mesh->primitives_count;
+            for (cgltf_size index = 0; index < nprims; ++index) {
+                gatherOrientationData(mesh->primitives[index]);
+            }
+        }
+    }
+
+    // Allocate a monolithic CPU-side buffer for holding normals and tangents.
+    uint32_t total = 0;
+    for (auto buffer : srcBuffers) {
+        total += buffer->size;
+    }
+    mResult->mOrientationBuffer.resize(total);
+    uint8_t* dstBuffer = mResult->mOrientationBuffer.data();
+
+    // Add bindings that copy an entire source blob into a region within the orientation buffer.
+    for (auto srcBuffer : srcBuffers) {
+        mResult->mBufferBindings.emplace_back(BufferBinding {
+            .uri = srcBuffer->uri,
+            .size = uint32_t(srcBuffer->size),
+            .totalSize = uint32_t(srcBuffer->size),
+            .orientationBuffer = dstBuffer
+        });
+        dstBuffer += srcBuffer->size;
     }
 }
 
