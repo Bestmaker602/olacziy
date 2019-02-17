@@ -462,6 +462,10 @@ void cgltf_free(cgltf_data* data);
 void cgltf_node_transform_local(const cgltf_node* node, cgltf_float* out_matrix);
 void cgltf_node_transform_world(const cgltf_node* node, cgltf_float* out_matrix);
 
+cgltf_result cgltf_accessor_convert(const cgltf_accessor* in_data, cgltf_float* out_floats);
+cgltf_result cgltf_accessor_convert_buffer(const cgltf_accessor* in_data, const void* buffer,
+        cgltf_float* out_floats);
+
 cgltf_result cgltf_load_buffer_base64(const cgltf_options* options, cgltf_size size,
         const char* base64, void** out_data);
 
@@ -3931,6 +3935,16 @@ static int cgltf_fixup_pointers(cgltf_data* data)
 	}
 
 	return 0;
+}
+
+cgltf_result cgltf_accessor_convert(const cgltf_accessor* in_data, cgltf_float* out_floats) {
+    return cgltf_accessor_convert_buffer(in_data, in_data->buffer_view->buffer->data, out_floats);
+}
+
+cgltf_result cgltf_accessor_convert_buffer(const cgltf_accessor* in_data, const void* buffer,
+        cgltf_float* out_floats) {
+    // TODO
+    return cgltf_result_success;
 }
 
 /*

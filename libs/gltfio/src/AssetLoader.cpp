@@ -443,7 +443,7 @@ bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* out
         }
     }
 
-    VertexBuffer* vertices = vbb.build(*mEngine);
+    VertexBuffer* vertices = mResult->mPrimMap[inPrim] = vbb.build(*mEngine);
 
     for (int slot = 0; slot < inPrim->attributes_count; slot++) {
         const cgltf_attribute& inputAttribute = inPrim->attributes[slot];

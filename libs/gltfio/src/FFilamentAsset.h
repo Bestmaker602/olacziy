@@ -125,6 +125,7 @@ struct FFilamentAsset : public FilamentAsset {
         cgltf_free((cgltf_data*) mSourceAsset);
         mSourceAsset = nullptr;
         mNodeMap.clear();
+        mPrimMap.clear();
     }
 
     filament::Engine* mEngine;
@@ -143,6 +144,7 @@ struct FFilamentAsset : public FilamentAsset {
     std::vector<uint8_t> mOrientationBuffer;
     const cgltf_data* mSourceAsset = nullptr;
     tsl::robin_map<const cgltf_node*, utils::Entity> mNodeMap;
+    tsl::robin_map<const cgltf_primitive*, filament::VertexBuffer*> mPrimMap;
     /** @} */
 };
 

@@ -196,7 +196,8 @@ Animator::Animator(FilamentAsset* publicAsset) {
     mImpl->renderableManager = &asset->mEngine->getRenderableManager();
     mImpl->transformManager = &asset->mEngine->getTransformManager();
 
-    UrlMap blobs; // TODO: can the key be const char* ?
+    // Build a map of URI strings to blob pointers. TODO: can the key be const char* ?
+    UrlMap blobs;
     const BufferBinding* bindings = asset->getBufferBindings();
     for (size_t i = 0, n = asset->getBufferBindingCount(); i < n; ++i) {
         auto bb = bindings[i];
@@ -205,6 +206,7 @@ Animator::Animator(FilamentAsset* publicAsset) {
         }
     }
 
+    // Loop over the glTF animation definitions.
     const cgltf_data* srcAsset = asset->mSourceAsset;
     const cgltf_animation* srcAnims = srcAsset->animations;
     mImpl->animations.resize(srcAsset->animations_count);
@@ -216,6 +218,7 @@ Animator::Animator(FilamentAsset* publicAsset) {
             dstAnim.name = srcAnim.name;
         }
 
+        // Import each glTF sampler into a custom data structure.
         cgltf_animation_sampler* srcSamplers = srcAnim.samplers;
         dstAnim.samplers.resize(srcAnim.samplers_count);
         for (cgltf_size j = 0, nsamps = srcAnim.samplers_count; j < nsamps; ++j) {
@@ -228,6 +231,7 @@ Animator::Animator(FilamentAsset* publicAsset) {
             }
         }
 
+        // Import each glTF channel into a custom data structure.
         cgltf_animation_channel* srcChannels = srcAnim.channels;
         dstAnim.channels.resize(srcAnim.channels_count);
         auto& transformManager = *mImpl->transformManager;
