@@ -180,6 +180,7 @@ FilamentAsset* FAssetLoader::createAssetFromBinary(uint8_t const* bytes, uint32_
 void FAssetLoader::createAsset(const cgltf_data* srcAsset) {
     mResult = new FFilamentAsset(mEngine);
     mResult->mSourceAsset = srcAsset;
+    mResult->acquireSourceAsset();
 
     // If there is no default scene specified, then the default is the first one.
     // It is not an error for a glTF file to have zero scenes.
@@ -376,6 +377,7 @@ bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* out
     mResult->mBufferBindings.emplace_back(BufferBinding {
         .uri = bv->buffer->uri,
         .totalSize = (uint32_t) bv->buffer->size,
+        .data = &bv->buffer->data,
         .indexBuffer = indices,
         .offset = computeBindingOffset(indicesAccessor),
         .size = computeBindingSize(indicesAccessor), 
@@ -456,6 +458,7 @@ bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* out
         mResult->mBufferBindings.emplace_back(BufferBinding {
             .uri = bv->buffer->uri,
             .totalSize = (uint32_t) bv->buffer->size,
+            .data = &bv->buffer->data,
             .vertexBuffer = vertices,
             .bufferIndex = slot,
             .offset = computeBindingOffset(inputAccessor),
@@ -601,6 +604,7 @@ void FAssetLoader::createAnimationBuffer() {
             .uri = srcBuffer->uri,
             .size = uint32_t(srcBuffer->size),
             .totalSize = uint32_t(srcBuffer->size),
+            .data = (void**) &srcBuffer->data,
             .animationBuffer = dstBuffer
         });
         dstBuffer += srcBuffer->size;
@@ -645,6 +649,7 @@ void FAssetLoader::createOrientationBuffer() {
             .uri = srcBuffer->uri,
             .size = uint32_t(srcBuffer->size),
             .totalSize = uint32_t(srcBuffer->size),
+            .data = (void**) &srcBuffer->data,
             .orientationBuffer = dstBuffer
         });
         dstBuffer += srcBuffer->size;
@@ -677,6 +682,7 @@ void FAssetLoader::importSkinningData(Skin& dstSkin, const cgltf_skin& srcSkin) 
             .uri = srcBuffer->uri,
             .size = uint32_t(srcSkin.joints_count * sizeof(mat4f)),
             .totalSize = uint32_t(srcBuffer->size),
+            .data = (void**) &srcBuffer->data,
             .animationBuffer = dstMatrices,
             .offset = uint32_t(srcMatrices->offset + srcMatrices->buffer_view->offset)
         });

@@ -122,10 +122,10 @@ public:
 struct BufferBinding {
     const char* uri;    // unique identifier for the source blob
     uint32_t totalSize; // size in bytes of the source blob at the given URI
-
-    int bufferIndex; // only used when the destination is a VertexBuffer
-    uint32_t offset; // byte count used only for vertex and index buffers
-    uint32_t size;   // byte count used only for vertex and index buffers
+    int bufferIndex;    // only used when the destination is a VertexBuffer
+    uint32_t offset;    // byte count used only for vertex and index buffers
+    uint32_t size;      // byte count used only for vertex and index buffers
+    void** data;        // pointer to the resource data in the source asset (if loaded)
 
     // Only one of the following destinations can be non-null.
     filament::VertexBuffer* vertexBuffer;

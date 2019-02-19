@@ -35,10 +35,6 @@
 
 #include <string>
 
-// TODO: to simplify the implementation of ResourceLoader, we are using cgltf_load_buffer_base64 and
-// cgltf_load_buffer_file, which are normally private to the library. We should consider
-// substituting these functions with our own implementation since they are fairly simple.
-
 using namespace filament;
 using namespace filament::math;
 using namespace utils;
@@ -51,86 +47,80 @@ namespace gltfio {
 
 using namespace details;
 
-// Converts an array-of-whatever into an array-of-float.
-static void convertToFloat(float* dst, size_t count, const cgltf_attribute* info,
-        const uint8_t* src);
-
-class UrlCache {
+class BlobCache {
 public:
-    void* getResource(const char* uri) {
-        auto iter = mBlobs.find(uri);
-        return (iter == mBlobs.end()) ? nullptr : iter->second;
+    BlobCache()  {}
+
+    ~BlobCache() {
+        for (auto asset : mAssets) {
+            asset->releaseSourceAsset();
+        }
     }
 
-    void addResource(const char* uri, void* blob) {
-        mBlobs[uri] = blob;
+    void addAsset(FFilamentAsset* asset) {
+        mAssets.push_back(asset);
+        asset->acquireSourceAsset();
     }
 
     void addPendingUpload() {
         ++mPendingUploads;
     }
 
-    UrlCache() {}
-
-    ~UrlCache() {
-        // TODO: free all mBlobs
-    }
-
     // Destroy the URL cache only after the pending upload count is zero and the client has
     // destroyed the ResourceLoader object.
     static void onLoadedResource(void* buffer, size_t size, void* user) {
-        auto cache = (UrlCache*) user;
-        if (--cache->mPendingUploads == 0 && cache->mOwnerDestroyed) {
+        auto cache = (BlobCache*) user;
+        if (--cache->mPendingUploads == 0 && cache->mLoaderDestroyed) {
             delete cache;
         }
     }
 
-    void onOwnerDestroyed() {
+    void onLoaderDestroyed() {
         if (mPendingUploads == 0) {
             delete this;
         } else {
-            mOwnerDestroyed = true;
+            mLoaderDestroyed = true;
         }
     }
 
 private:
-    bool mOwnerDestroyed = false;
+    std::vector<FFilamentAsset*> mAssets;
+    bool mLoaderDestroyed = false;
     int mPendingUploads = 0;
-    tsl::robin_map<std::string, void*> mBlobs; // TODO: can we simply use const char* for the key?
 };
 
 ResourceLoader::ResourceLoader(Engine* engine, const char* basePath) : mEngine(engine),
-        mBasePath(basePath), mCache(new UrlCache) {}
+        mBasePath(basePath), mCache(new BlobCache) {}
 
 ResourceLoader::~ResourceLoader() {
-    mCache->onOwnerDestroyed();
+    mCache->onLoaderDestroyed();
 }
 
 bool ResourceLoader::loadResources(FilamentAsset* asset) {
+    FFilamentAsset* fasset = upcast(asset);
+    mCache->addAsset(fasset);
+
+    // Read data from the file system and base64 URLs.
+    cgltf_options options {};
+    auto gltf = (cgltf_data*) fasset->mSourceAsset;
+    cgltf_result result = cgltf_load_buffers(&options, gltf, mBasePath.c_str());
+    if (result != cgltf_result_success) {
+        slog.e << "Unable to load resources." << io::endl;
+        return false;
+    }
+
+    // Upload data to the GPU, or do a memcpy for animation / orientation data.
     const BufferBinding* bindings = asset->getBufferBindings();
     for (size_t i = 0, n = asset->getBufferBindingCount(); i < n; ++i) {
         auto bb = bindings[i];
-        void* data = mCache->getResource(bb.uri);
-        if (data) {
-            // Do nothing.
-        } else if (isBase64(bb)) {
-            data = loadBase64(bb);
-            mCache->addResource(bb.uri, data);
-        } else if (isFile(bb)) {
-            data = loadFile(bb);
-            mCache->addResource(bb.uri, data);
-        } else {
-            slog.e << "Unable to obtain resource: " << bb.uri << io::endl;
-            return false;
-        }
-        uint8_t* ucdata = bb.offset + (uint8_t*) data;
+        const uint8_t* ucdata = bb.offset + (const uint8_t*) *bb.data;
         if (bb.vertexBuffer) {
             mCache->addPendingUpload();
-            VertexBuffer::BufferDescriptor bd(ucdata, bb.size, UrlCache::onLoadedResource, mCache);
+            VertexBuffer::BufferDescriptor bd(ucdata, bb.size, BlobCache::onLoadedResource, mCache);
             bb.vertexBuffer->setBufferAt(*mEngine, bb.bufferIndex, std::move(bd));
         } else if (bb.indexBuffer) {
             mCache->addPendingUpload();
-            VertexBuffer::BufferDescriptor bd(ucdata, bb.size, UrlCache::onLoadedResource, mCache);
+            VertexBuffer::BufferDescriptor bd(ucdata, bb.size, BlobCache::onLoadedResource, mCache);
             bb.indexBuffer->setBuffer(*mEngine, std::move(bd));
         } else if (bb.animationBuffer) {
             memcpy(bb.animationBuffer, ucdata, bb.size);
@@ -142,56 +132,11 @@ bool ResourceLoader::loadResources(FilamentAsset* asset) {
         }
     }
 
-    FFilamentAsset* fasset = upcast(asset);
+    // Compute surface orientation quaternions if necessary.
     if (fasset->mOrientationBuffer.size() > 0) {
         computeTangents(fasset);
     }
     return true;
-}
-
-bool ResourceLoader::isBase64(const BufferBinding& bb) {
-   if (bb.uri && strncmp(bb.uri, "data:", 5) == 0) {
-        const char* comma = strchr(bb.uri, ',');
-        if (comma && comma - bb.uri >= 7 && strncmp(comma - 7, ";base64", 7) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-void* ResourceLoader::loadBase64(const BufferBinding& bb) {
-    if (!bb.uri || strncmp(bb.uri, "data:", 5)) {
-        return nullptr;
-    }
-    const char* comma = strchr(bb.uri, ',');
-    if (comma && comma - bb.uri >= 7 && strncmp(comma - 7, ";base64", 7) == 0) {
-        cgltf_options options {};
-        void* data = nullptr;
-        cgltf_result result = cgltf_load_buffer_base64(
-                &options, bb.totalSize, comma + 1, &data);
-        if (result != cgltf_result_success) {
-            slog.e << "Unable to parse base64 URL." << io::endl;
-            return nullptr;
-        }
-        return data;
-    }
-    return nullptr;
-}
-
-bool ResourceLoader::isFile(const BufferBinding& bb) {
-    return strstr(bb.uri, "://") == nullptr;
-}
-
-void* ResourceLoader::loadFile(const BufferBinding& bb) {
-    cgltf_options options {};
-    void* data = nullptr;
-    cgltf_result result = cgltf_load_buffer_file(
-            &options, bb.totalSize, bb.uri, mBasePath.c_str(), &data);
-    if (result != cgltf_result_success) {
-        slog.e << "Unable to consume " << bb.uri << io::endl;
-        return nullptr;
-    }
-    return data;
 }
 
 void ResourceLoader::computeTangents(const FFilamentAsset* asset) {
@@ -280,10 +225,6 @@ void ResourceLoader::computeTangents(const FFilamentAsset* asset) {
             }
         }
     }
-}
-
-static void convertToFloat(float* dst, size_t count, const cgltf_attribute* info,
-        const uint8_t* src) {
 }
 
 } // namespace gltfio

@@ -122,10 +122,20 @@ struct FFilamentAsset : public FilamentAsset {
         mAnimationBuffer.shrink_to_fit();
         mOrientationBuffer.clear();
         mOrientationBuffer.shrink_to_fit();
-        cgltf_free((cgltf_data*) mSourceAsset);
-        mSourceAsset = nullptr;
         mNodeMap.clear();
         mPrimMap.clear();
+        releaseSourceAsset();
+    }
+
+    void acquireSourceAsset() {
+        ++mSourceAssetRefCount;
+    }
+
+    void releaseSourceAsset() {
+        if (--mSourceAssetRefCount == 0) {
+            cgltf_free((cgltf_data*) mSourceAsset);
+            mSourceAsset = nullptr;
+        }
     }
 
     filament::Engine* mEngine;
@@ -135,6 +145,7 @@ struct FFilamentAsset : public FilamentAsset {
     utils::Entity mRoot;
     std::vector<Skin> mSkins;
     Animator* mAnimator = nullptr;
+    int mSourceAssetRefCount = 0;
 
     /** @{
      * Transient source data that can freed via releaseSourceData(). */

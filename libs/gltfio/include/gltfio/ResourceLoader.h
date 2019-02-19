@@ -31,7 +31,7 @@ namespace details {
     class FFilamentAsset;
 }
 
-class UrlCache;
+class BlobCache;
 
 /**
  * ResourceLoader asynchronously uploads vertex buffers and textures to the GPU and computes
@@ -39,13 +39,13 @@ class UrlCache;
  *
  * For a usage example, see the comment block for AssetLoader.
  *
- * This class holds a map of URL's to data blobs and can therefore be used for multiple assets.
- * However, if desired, clients can immediately destroy the helper after calling loadResources.
- * There is no need to wait for resources to finish uploading because this is done in the
- * the background.
+ * In theory, this class could cache a map of URL's to data blobs and could therefore be useful
+ * across multiple assets. However, clients should feel free to immediately destroy this after
+ * calling loadResources. There is no need to wait for resources to finish uploading because this is
+ * done in the the background.
  *
- * The helper must be destroyed on the same thread that calls Renderer::render because it listens to
- * BufferDescriptor callbacks in order to determine when to free CPU-side data blobs.
+ * The resource loader must be destroyed on the same thread that calls Renderer::render because it
+ * listens to BufferDescriptor callbacks in order to determine when to free CPU-side data blobs.
  *
  * TODO: the GPU upload is asynchronous but the load-from-disk and image decode is not.
  * TODO: using this class is required for proper tangent quaternions, ideally it would be optional.
@@ -56,12 +56,8 @@ public:
     ~ResourceLoader();
     bool loadResources(FilamentAsset* asset);
 private:
-    bool isBase64(const BufferBinding& bb);
-    bool isFile(const BufferBinding& bb);
-    void* loadBase64(const BufferBinding& bb);
-    void* loadFile(const BufferBinding& bb);
     void computeTangents(const details::FFilamentAsset* asset);
-    UrlCache* mCache;
+    BlobCache* mCache;
     filament::Engine* mEngine;
     utils::Path mBasePath;
 };
