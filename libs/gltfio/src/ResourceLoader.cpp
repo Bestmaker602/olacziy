@@ -247,11 +247,11 @@ void ResourceLoader::computeTangents(const FFilamentAsset* asset) {
         // Convert normals (and possibly tangents) into floating point.
         assert(normalsInfo->count == vertexCount);
         assert(normalsInfo->type == cgltf_type_vec3);
-        cgltf_accessor_convert_buffer(normalsInfo, normalsBlob, &fp32Normals.data()->x);
+        cgltf_accessor_convert_buffer_data(normalsInfo, normalsBlob, &fp32Normals.data()->x);
         if (tangentsInfo) {
             assert(tangentsInfo->count == vertexCount);
             assert(tangentsInfo->type == cgltf_type_vec4);
-            cgltf_accessor_convert_buffer(tangentsInfo, tangentsBlob, &fp32Tangents.data()->x);
+            cgltf_accessor_convert_buffer_data(tangentsInfo, tangentsBlob, &fp32Tangents.data()->x);
         }
 
         // Compute surface orientation quaternions.
