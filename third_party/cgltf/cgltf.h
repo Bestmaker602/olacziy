@@ -1,6 +1,49 @@
 /**
  * cgltf - a single-file glTF 2.0 parser written in C99.
+ *
+ * Version: 1.0
+ *
+ * Website: https://github.com/jkuhlmann/cgltf
+ *
  * Distributed under the MIT License, see notice at the end of this file.
+ *
+ * Building:
+ * Include this file where you need the struct and function
+ * declarations. Have exactly one source file where you define
+ * `CGLTF_IMPLEMENTATION` before including this file to get the
+ * function definitions.
+ *
+ * Reference:
+ * `cgltf_result cgltf_parse(const cgltf_options*, const void*,
+ * cgltf_size, cgltf_data**)` parses both glTF and GLB data. If
+ * this function returns `cgltf_result_success`, you have to call
+ * `cgltf_free()` on the created `cgltf_data*` variable.
+ * Note that contents of external files for buffers and images are not
+ * automatically loaded. You'll need to read these files yourself using
+ * URIs in the `cgltf_data` structure.
+ *
+ * `cgltf_options` is the struct passed to `cgltf_parse()` to control
+ * parts of the parsing process. You can use it to force the file type
+ * and provide memory allocation callbacks. Should be zero-initialized
+ * to trigger default behavior.
+ *
+ * `cgltf_data` is the struct allocated and filled by `cgltf_parse()`.
+ * It generally mirrors the glTF format as described by the spec (see
+ * https://github.com/KhronosGroup/glTF/tree/master/specification/2.0).
+ *
+ * `void cgltf_free(cgltf_data*)` frees the allocated `cgltf_data`
+ * variable.
+ *
+ * `cgltf_result cgltf_load_buffers(const cgltf_options*, cgltf_data*,
+ * const char*)` can be optionally called to open and read buffer
+ * files using the `FILE*` APIs.
+ *
+ * `cgltf_result cgltf_parse_file(const cgltf_options* options, const
+ * char* path, cgltf_data** out_data)` can be used to open the given
+ * file using `FILE*` APIs and parse the data using `cgltf_parse()`.
+ *
+ * `cgltf_result cgltf_validate(cgltf_data*)` can be used to do additional
+ * checks to make sure the parsed glTF data is valid.
  */
 #ifndef CGLTF_H_INCLUDED__
 #define CGLTF_H_INCLUDED__
@@ -462,24 +505,8 @@ void cgltf_free(cgltf_data* data);
 void cgltf_node_transform_local(const cgltf_node* node, cgltf_float* out_matrix);
 void cgltf_node_transform_world(const cgltf_node* node, cgltf_float* out_matrix);
 
-void cgltf_accessor_convert(const cgltf_accessor* in, cgltf_float* out);
-
-void cgltf_accessor_convert_buffer_data(
-		const cgltf_accessor* in,
-		const void* buffer_data,
-		cgltf_float* out);
-
-void cgltf_accessor_convert_sparse(
-		const cgltf_accessor* in,
-		const void* indices_buffer_data,
-		const void* values_buffer_data,
-		cgltf_float* out);
-
-cgltf_result cgltf_load_buffer_base64(const cgltf_options* options, cgltf_size size,
-		const char* base64, void** out_data);
-
-cgltf_result cgltf_load_buffer_file(const cgltf_options* options, cgltf_size size, const char* uri,
-		const char* base_path, void** out_data);
+cgltf_float cgltf_accessor_read_float(const cgltf_accessor* accessor, size_t index, size_t component);
+cgltf_int cgltf_accessor_read_int(const cgltf_accessor* accessor, size_t index, size_t component);
 
 #ifdef __cplusplus
 }
@@ -504,7 +531,8 @@ cgltf_result cgltf_load_buffer_file(const cgltf_options* options, cgltf_size siz
 #include <stdint.h> /* For uint8_t, uint32_t */
 #include <string.h> /* For strncpy */
 #include <stdlib.h> /* For malloc, free */
-#include <stdio.h> /* For fopen */
+#include <stdio.h>  /* For fopen */
+#include <limits.h> /* For UINT_MAX etc */
 
 /*
  * -- jsmn.h start --
@@ -790,7 +818,7 @@ static void cgltf_combine_paths(char* path, const char* base, const char* uri)
 	}
 }
 
-cgltf_result cgltf_load_buffer_file(const cgltf_options* options, cgltf_size size, const char* uri, const char* base_path, void** out_data)
+static cgltf_result cgltf_load_buffer_file(const cgltf_options* options, cgltf_size size, const char* uri, const char* base_path, void** out_data)
 {
 	void* (*memory_alloc)(void*, cgltf_size) = options->memory_alloc ? options->memory_alloc : &cgltf_default_alloc;
 	void (*memory_free)(void*, void*) = options->memory_free ? options->memory_free : &cgltf_default_free;
@@ -834,7 +862,7 @@ cgltf_result cgltf_load_buffer_file(const cgltf_options* options, cgltf_size siz
 	return cgltf_result_success;
 }
 
-cgltf_result cgltf_load_buffer_base64(const cgltf_options* options, cgltf_size size, const char* base64, void** out_data)
+static cgltf_result cgltf_load_buffer_base64(const cgltf_options* options, cgltf_size size, const char* base64, void** out_data)
 {
 	void* (*memory_alloc)(void*, cgltf_size) = options->memory_alloc ? options->memory_alloc : &cgltf_default_alloc;
 	void (*memory_free)(void*, void*) = options->memory_free ? options->memory_free : &cgltf_default_free;
@@ -1341,6 +1369,221 @@ void cgltf_node_transform_world(const cgltf_node* node, cgltf_float* out_matrix)
 
 		parent = parent->parent;
 	}
+}
+
+static cgltf_float cgltf_component_read_float(const void* in, cgltf_component_type component_type, cgltf_bool normalized)
+{
+	if (component_type == cgltf_component_type_r_32f)
+	{
+		return *((const float*) in);
+	}
+
+	if (normalized)
+	{
+		switch (component_type)
+		{
+			case cgltf_component_type_r_32u:
+				return *((const uint32_t*) in) / (float) UINT_MAX;
+			case cgltf_component_type_r_16:
+				return *((const int16_t*) in) / (float) SHRT_MAX;
+			case cgltf_component_type_r_16u:
+				return *((const uint16_t*) in) / (float) USHRT_MAX;
+			case cgltf_component_type_r_8:
+				return *((const int8_t*) in) / (float) SCHAR_MAX;
+			case cgltf_component_type_r_8u:
+			case cgltf_component_type_invalid:
+			default:
+				return *((const uint8_t*) in) / (float) CHAR_MAX;
+		}
+	}
+
+	switch (component_type)
+	{
+		case cgltf_component_type_r_32u:
+			return *((const uint32_t*) in);
+		case cgltf_component_type_r_16:
+			return *((const int16_t*) in);
+		case cgltf_component_type_r_16u:
+			return *((const uint16_t*) in);
+		case cgltf_component_type_r_8:
+			return *((const int8_t*) in);
+		case cgltf_component_type_r_8u:
+		case cgltf_component_type_invalid:
+		default:
+			return *((const uint8_t*) in);
+	}
+}
+
+static cgltf_int cgltf_component_read_int(const void* in, cgltf_component_type component_type)
+{
+	switch (component_type)
+	{
+		case cgltf_component_type_r_16:
+			return *((const int16_t*) in);
+		case cgltf_component_type_r_16u:
+			return *((const uint16_t*) in);
+		case cgltf_component_type_r_32u:
+			return *((const uint32_t*) in);
+		case cgltf_component_type_r_32f:
+			return *((const float*) in);
+		case cgltf_component_type_r_8u:
+		case cgltf_component_type_invalid:
+		default:
+			return *((const uint8_t*) in);
+	}
+}
+
+static cgltf_size cgltf_component_size(cgltf_component_type component_type);
+
+static cgltf_int cgltf_element_read_int(const uint8_t* element, cgltf_type type, cgltf_component_type component_type, size_t component)
+{
+	cgltf_size component_size = cgltf_component_size(component_type);
+
+	// There are three special cases for component extraction, see #data-alignment in the 2.0 spec.
+
+	if (type == cgltf_type_mat2 && component_size == 1)
+	{
+		cgltf_int out[] = {
+			cgltf_component_read_int(element, component_type),
+			cgltf_component_read_int(element + 1, component_type),
+			cgltf_component_read_int(element + 4, component_type),
+			cgltf_component_read_int(element + 5, component_type)
+		};
+		return out[component];
+	}
+
+	if (type == cgltf_type_mat3 && component_size == 1)
+	{
+		cgltf_int out[] = {
+			cgltf_component_read_int(element, component_type),
+			cgltf_component_read_int(element + 1, component_type),
+			cgltf_component_read_int(element + 2, component_type),
+			cgltf_component_read_int(element + 4, component_type),
+			cgltf_component_read_int(element + 5, component_type),
+			cgltf_component_read_int(element + 6, component_type),
+			cgltf_component_read_int(element + 8, component_type),
+			cgltf_component_read_int(element + 9, component_type),
+			cgltf_component_read_int(element + 10, component_type)
+		};
+		return out[component];
+	}
+
+	if (type == cgltf_type_mat3 && component_size == 2)
+	{
+		cgltf_int out[] = {
+			cgltf_component_read_int(element, component_type),
+			cgltf_component_read_int(element + 2, component_type),
+			cgltf_component_read_int(element + 4, component_type),
+			cgltf_component_read_int(element + 8, component_type),
+			cgltf_component_read_int(element + 10, component_type),
+			cgltf_component_read_int(element + 12, component_type),
+			cgltf_component_read_int(element + 16, component_type),
+			cgltf_component_read_int(element + 18, component_type),
+			cgltf_component_read_int(element + 20, component_type)
+		};
+		return out[component];
+	}
+
+	return cgltf_component_read_int(element + component_size * component, component_type);
+}
+
+static cgltf_float cgltf_element_read_float(const uint8_t* element, cgltf_type type, cgltf_component_type component_type, cgltf_bool normalized, size_t component)
+{
+	cgltf_size component_size = cgltf_component_size(component_type);
+
+	// There are three special cases for component extraction, see #data-alignment in the 2.0 spec.
+
+	if (type == cgltf_type_mat2 && component_size == 1)
+	{
+		cgltf_float out[] = {
+			cgltf_component_read_float(element, component_type, normalized),
+			cgltf_component_read_float(element + 1, component_type, normalized),
+			cgltf_component_read_float(element + 4, component_type, normalized),
+			cgltf_component_read_float(element + 5, component_type, normalized)
+		};
+		return out[component];
+	}
+
+	if (type == cgltf_type_mat3 && component_size == 1)
+	{
+		cgltf_float out[] = {
+			cgltf_component_read_float(element, component_type, normalized),
+			cgltf_component_read_float(element + 1, component_type, normalized),
+			cgltf_component_read_float(element + 2, component_type, normalized),
+			cgltf_component_read_float(element + 4, component_type, normalized),
+			cgltf_component_read_float(element + 5, component_type, normalized),
+			cgltf_component_read_float(element + 6, component_type, normalized),
+			cgltf_component_read_float(element + 8, component_type, normalized),
+			cgltf_component_read_float(element + 9, component_type, normalized),
+			cgltf_component_read_float(element + 10, component_type, normalized)
+		};
+		return out[component];
+	}
+
+	if (type == cgltf_type_mat3 && component_size == 2)
+	{
+		cgltf_float out[] = {
+			cgltf_component_read_float(element, component_type, normalized),
+			cgltf_component_read_float(element + 2, component_type, normalized),
+			cgltf_component_read_float(element + 4, component_type, normalized),
+			cgltf_component_read_float(element + 8, component_type, normalized),
+			cgltf_component_read_float(element + 10, component_type, normalized),
+			cgltf_component_read_float(element + 12, component_type, normalized),
+			cgltf_component_read_float(element + 16, component_type, normalized),
+			cgltf_component_read_float(element + 18, component_type, normalized),
+			cgltf_component_read_float(element + 20, component_type, normalized)
+		};
+		return out[component];
+	}
+
+	return cgltf_component_read_float(element + component_size * component, component_type, normalized);
+}
+
+
+cgltf_float cgltf_accessor_read_float(const cgltf_accessor* accessor, size_t index, size_t component)
+{
+	if (accessor->is_sparse)
+	{
+		const cgltf_accessor_sparse* sparse = &accessor->sparse;
+		cgltf_size index_offset = sparse->indices_byte_offset + sparse->indices_buffer_view->offset;
+		cgltf_size index_stride = cgltf_component_size(sparse->indices_component_type);
+		const uint8_t* index_element = (const uint8_t*) sparse->indices_buffer_view->buffer->data;
+		index_element += index_offset + index_stride * index;
+		index = cgltf_element_read_int(index_element, cgltf_type_scalar, sparse->indices_component_type, 0);
+
+		cgltf_size offset = sparse->values_byte_offset + sparse->values_buffer_view->offset;
+		const uint8_t* element = (const uint8_t*) sparse->values_buffer_view->buffer->data;
+		element += offset + accessor->stride * index;
+		return cgltf_element_read_float(element, accessor->type, accessor->component_type, accessor->normalized, component);
+	}
+
+	cgltf_size offset = accessor->offset + accessor->buffer_view->offset;
+	const uint8_t* element = (const uint8_t*) accessor->buffer_view->buffer->data;
+	element += offset + accessor->stride * index;
+	return cgltf_element_read_float(element, accessor->type, accessor->component_type, accessor->normalized, component);
+}
+
+cgltf_int cgltf_accessor_read_int(const cgltf_accessor* accessor, size_t index, size_t component)
+{
+	if (accessor->is_sparse)
+	{
+		const cgltf_accessor_sparse* sparse = &accessor->sparse;
+		cgltf_size index_offset = sparse->indices_byte_offset + sparse->indices_buffer_view->offset;
+		cgltf_size index_stride = cgltf_component_size(sparse->indices_component_type);
+		const uint8_t* index_element = (const uint8_t*) sparse->indices_buffer_view->buffer->data;
+		index_element += index_offset + index_stride * index;
+		index = cgltf_element_read_int(index_element, cgltf_type_scalar, sparse->indices_component_type, 0);
+
+		cgltf_size offset = sparse->values_byte_offset + sparse->values_buffer_view->offset;
+		const uint8_t* element = (const uint8_t*) sparse->values_buffer_view->buffer->data;
+		element += offset + accessor->stride * index;
+		return cgltf_element_read_int(element, accessor->type, accessor->component_type, component);
+	}
+
+	cgltf_size offset = accessor->offset + accessor->buffer_view->offset;
+	const uint8_t* element = (const uint8_t*) accessor->buffer_view->buffer->data;
+	element += offset + accessor->stride * index;
+	return cgltf_element_read_int(element, accessor->type, accessor->component_type, component);
 }
 
 #define CGLTF_ERROR_JSON -1
@@ -3935,229 +4178,6 @@ static int cgltf_fixup_pointers(cgltf_data* data)
 	}
 
 	return 0;
-}
-
-static float cgltf_convert_component(const void* in, cgltf_component_type component_type, cgltf_bool normalized)
-{
-	switch (component_type)
-	{
-		case cgltf_component_type_r_32f:
-			return *((float*) in);
-		case cgltf_component_type_r_32u:
-		{
-			uint32_t val = *((uint32_t*) in);
-			double dval = (double) val / (double) UINT_MAX;
-			return normalized ? dval : val;
-
-		}
-		case cgltf_component_type_r_16:
-		{
-			int16_t val = *((int16_t*) in);
-			double dval = (double) val / (double) SHRT_MAX;
-			return normalized ? dval : val;
-		}
-		case cgltf_component_type_r_16u:
-		{
-			uint16_t val = *((uint16_t*) in);
-			double dval = (double) val / (double) USHRT_MAX;
-			return normalized ? dval : val;
-		}
-		case cgltf_component_type_r_8:
-		{
-			int8_t val = *((int8_t*) in);
-			double dval = (double) val / (double) SCHAR_MAX;
-			return normalized ? dval : val;
-		}
-		case cgltf_component_type_invalid:
-		case cgltf_component_type_r_8u:
-		{
-			uint8_t val = *((uint8_t*) in);
-			double dval = (double) val / (double) CHAR_MAX;
-			return normalized ? dval : val;
-		}
-	}
-}
-
-void cgltf_accessor_convert(const cgltf_accessor* in, cgltf_float* out)
-{
-	const void* buffer_data = in->buffer_view ? in->buffer_view->buffer->data : NULL;
-	if (buffer_data)
-	{
-		cgltf_accessor_convert_buffer_data(in, buffer_data, out);
-	}
-	if (in->is_sparse)
-	{
-		const void* indices = in->sparse.indices_buffer_view->buffer->data;
-		const void* values = in->sparse.values_buffer_view->buffer->data;
-		cgltf_accessor_convert_sparse(in, indices, values, out);
-	}
-}
-
-void cgltf_get_as_index(cgltf_size* out, cgltf_size index, cgltf_component_type component_type, cgltf_size offset, const cgltf_buffer_view* buffer_view, const void* buffer_data)
-{
-	const uint8_t* bytes = ((const uint8_t*) buffer_data) + offset + buffer_view->offset;
-	bytes += index * cgltf_component_size(component_type);
-	switch (component_type)
-	{
-		case cgltf_component_type_r_8u:
-			*out = *bytes;
-			return;
-		case cgltf_component_type_r_16u:
-			*out = *((const uint16_t*) bytes);
-			return;
-		case cgltf_component_type_r_32u:
-			*out = *((const uint32_t*) bytes);
-			return;
-		default:
-			*out = 0;
-	}
-}
-
-void cgltf_get_as_float(cgltf_float* out, cgltf_size index, cgltf_component_type component_type, cgltf_type type, cgltf_bool normalized, cgltf_size offset, const cgltf_buffer_view* buffer_view, const void* buffer_data)
-{
-	const uint8_t* bytes = ((const uint8_t*) buffer_data) + offset + buffer_view->offset;
-	bytes += buffer_view->stride * index;
-	const cgltf_size component_size = cgltf_component_size(component_type);
-	const cgltf_size num_components = cgltf_num_components(type);
-
-	if (type == cgltf_type_mat2 && component_size == 1)
-	{
-		out[0] = cgltf_convert_component(bytes, component_type, normalized);
-		out[1] = cgltf_convert_component(bytes + 1, component_type, normalized);
-		out[2] = cgltf_convert_component(bytes + 4, component_type, normalized);
-		out[3] = cgltf_convert_component(bytes + 5, component_type, normalized);
-		return;
-	}
-
-	if (type == cgltf_type_mat3 && component_size == 1)
-	{
-		out[0] = cgltf_convert_component(bytes, component_type, normalized);
-		out[1] = cgltf_convert_component(bytes + 1, component_type, normalized);
-		out[2] = cgltf_convert_component(bytes + 2, component_type, normalized);
-		out[3] = cgltf_convert_component(bytes + 4, component_type, normalized);
-		out[4] = cgltf_convert_component(bytes + 5, component_type, normalized);
-		out[5] = cgltf_convert_component(bytes + 6, component_type, normalized);
-		out[6] = cgltf_convert_component(bytes + 8, component_type, normalized);
-		out[7] = cgltf_convert_component(bytes + 9, component_type, normalized);
-		out[8] = cgltf_convert_component(bytes + 10, component_type, normalized);
-		return;
-	}
-
-	if (type == cgltf_type_mat3 && component_size == 2)
-	{
-		out[0] = cgltf_convert_component(bytes, component_type, normalized);
-		out[1] = cgltf_convert_component(bytes + 2, component_type, normalized);
-		out[2] = cgltf_convert_component(bytes + 4, component_type, normalized);
-		out[3] = cgltf_convert_component(bytes + 8, component_type, normalized);
-		out[4] = cgltf_convert_component(bytes + 10, component_type, normalized);
-		out[5] = cgltf_convert_component(bytes + 12, component_type, normalized);
-		out[6] = cgltf_convert_component(bytes + 16, component_type, normalized);
-		out[7] = cgltf_convert_component(bytes + 18, component_type, normalized);
-		out[8] = cgltf_convert_component(bytes + 20, component_type, normalized);
-		return;
-	}
-
-	for (cgltf_size j = 0; j < num_components; ++j, bytes += component_size)
-	{
-		out[j] = cgltf_convert_component(bytes, component_type, normalized);
-	}
-}
-
-void cgltf_accessor_convert_sparse(const cgltf_accessor* in, const void* sparse_indices_data, const void* sparse_values_data, cgltf_float* out)
-{
-	if (in->buffer_view == NULL)
-	{
-		memset(out, 0, in->count * sizeof(float));
-	}
-	const cgltf_accessor_sparse* sparse = &in->sparse;
-	const cgltf_size num_components = cgltf_num_components(in->type);
-	double value[16];
-	cgltf_size index;
-	for (cgltf_size i = 0; i < sparse->count; ++i)
-	{
-		cgltf_get_as_index(&index, i, sparse->indices_component_type, sparse->indices_byte_offset, sparse->indices_buffer_view, sparse_indices_data);
-		cgltf_float* target = out + index * num_components;
-		cgltf_get_as_float(target, i, in->component_type, in->type, in->normalized, sparse->values_byte_offset, sparse->values_buffer_view, sparse_values_data);
-	}
-}
-
-void cgltf_accessor_convert_buffer_data(const cgltf_accessor* in, const void* buffer_data, cgltf_float* out)
-{
-	cgltf_size bvoffset = buffer_data ? in->buffer_view->offset : 0;
-	const uint8_t* bytes = ((const uint8_t*) buffer_data) + in->offset + bvoffset;
-	const cgltf_component_type component_type = in->component_type;
-	const cgltf_size component_size = cgltf_component_size(component_type);
-	const cgltf_size num_components = cgltf_num_components(in->type);
-	const cgltf_bool normalized = in->normalized;
-
-	if (in->stride == num_components * component_size && component_type == cgltf_component_type_r_32f)
-	{
-		memcpy(out, buffer_data, num_components * component_size * in->count);
-		return;
-	}
-
-	if (in->type == cgltf_type_mat2 && component_size == 1)
-	{
-		for (cgltf_size i = 0; i < in->count; ++i)
-		{
-			out[0] = cgltf_convert_component(bytes, component_type, normalized);
-			out[1] = cgltf_convert_component(bytes + 1, component_type, normalized);
-			out[2] = cgltf_convert_component(bytes + 4, component_type, normalized);
-			out[3] = cgltf_convert_component(bytes + 5, component_type, normalized);
-			bytes += in->stride;
-			out += num_components;
-		}
-		return;
-	}
-
-	if (in->type == cgltf_type_mat3 && component_size == 1)
-	{
-		for (cgltf_size i = 0; i < in->count; ++i)
-		{
-			out[0] = cgltf_convert_component(bytes, component_type, normalized);
-			out[1] = cgltf_convert_component(bytes + 1, component_type, normalized);
-			out[2] = cgltf_convert_component(bytes + 2, component_type, normalized);
-			out[3] = cgltf_convert_component(bytes + 4, component_type, normalized);
-			out[4] = cgltf_convert_component(bytes + 5, component_type, normalized);
-			out[5] = cgltf_convert_component(bytes + 6, component_type, normalized);
-			out[6] = cgltf_convert_component(bytes + 8, component_type, normalized);
-			out[7] = cgltf_convert_component(bytes + 9, component_type, normalized);
-			out[8] = cgltf_convert_component(bytes + 10, component_type, normalized);
-			bytes += in->stride;
-			out += num_components;
-		}
-		return;
-	}
-
-	if (in->type == cgltf_type_mat3 && component_size == 2)
-	{
-		for (cgltf_size i = 0; i < in->count; ++i)
-		{
-			out[0] = cgltf_convert_component(bytes, component_type, normalized);
-			out[1] = cgltf_convert_component(bytes + 2, component_type, normalized);
-			out[2] = cgltf_convert_component(bytes + 4, component_type, normalized);
-			out[3] = cgltf_convert_component(bytes + 8, component_type, normalized);
-			out[4] = cgltf_convert_component(bytes + 10, component_type, normalized);
-			out[5] = cgltf_convert_component(bytes + 12, component_type, normalized);
-			out[6] = cgltf_convert_component(bytes + 16, component_type, normalized);
-			out[7] = cgltf_convert_component(bytes + 18, component_type, normalized);
-			out[8] = cgltf_convert_component(bytes + 20, component_type, normalized);
-			bytes += in->stride;
-			out += num_components;
-		}
-		return;
-	}
-
-	for (cgltf_size i = 0; i < in->count; ++i)
-	{
-		const uint8_t* comp = bytes;
-		for (cgltf_size j = 0; j < num_components; ++j, comp += component_size)
-		{
-			out[j] = cgltf_convert_component(comp, component_type, normalized);
-		}
-		bytes += in->stride;
-		out += num_components;
-	}
 }
 
 /*

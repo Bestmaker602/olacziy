@@ -140,18 +140,7 @@ bool ResourceLoader::loadResources(FilamentAsset* asset) {
 }
 
 void ResourceLoader::computeTangents(const FFilamentAsset* asset) {
-    // Build a map of URI strings to blob pointers. TODO: can the key be const char* ?
-    UrlMap blobs;
-    const BufferBinding* bindings = asset->getBufferBindings();
-    for (size_t i = 0, n = asset->getBufferBindingCount(); i < n; ++i) {
-        auto bb = bindings[i];
-        if (bb.orientationBuffer) {
-            blobs[bb.uri] = bb.orientationBuffer;
-        }
-    }
-
-    // Declare a vector of quats (which we will populate via populateTangentQuaternions)
-    // as well as vectors of normals and tangents (which we'll extract & convert from the source)
+    // Declare vectors of normals and tangents, which we'll extract & convert from the source.
     std::vector<float3> fp32Normals;
     std::vector<float4> fp32Tangents;
 
@@ -160,9 +149,7 @@ void ResourceLoader::computeTangents(const FFilamentAsset* asset) {
         // Iterate through the attributes and find the normals and tangents (if any).
         cgltf_size normalsSlot = 0;
         cgltf_size vertexCount = 0;
-        const uint8_t* normalsBlob = nullptr;
         const cgltf_accessor* normalsInfo = nullptr;
-        const uint8_t* tangentsBlob = nullptr;
         const cgltf_accessor* tangentsInfo = nullptr;
         for (cgltf_size slot = 0; slot < prim.attributes_count; slot++) {
             const cgltf_attribute& attr = prim.attributes[slot];
@@ -170,33 +157,40 @@ void ResourceLoader::computeTangents(const FFilamentAsset* asset) {
             const char* uri = attr.data->buffer_view->buffer->uri;
             if (attr.type == cgltf_attribute_type_normal) {
                 normalsSlot = slot;
-                normalsBlob = blobs[uri];
                 normalsInfo = attr.data;
                 continue;
             }
             if (attr.type == cgltf_attribute_type_tangent) {
-                tangentsBlob = blobs[uri];
                 tangentsInfo = attr.data;
                 continue;
             }
         }
-        if (normalsBlob == nullptr || vertexCount == 0) {
+        if (normalsInfo == nullptr || vertexCount == 0) {
             return;
         }
 
         // Allocate space for the input and output of the tangent computation.
         fp32Normals.resize(vertexCount);
-        fp32Tangents.resize(tangentsBlob ? vertexCount : 0);
+        fp32Tangents.resize(tangentsInfo ? vertexCount : 0);
         quath* fp16Quats = (quath*) malloc(sizeof(quath) * vertexCount);
 
         // Convert normals (and possibly tangents) into floating point.
         assert(normalsInfo->count == vertexCount);
         assert(normalsInfo->type == cgltf_type_vec3);
-        cgltf_accessor_convert_buffer_data(normalsInfo, normalsBlob, &fp32Normals.data()->x);
+        for (cgltf_size i = 0; i < vertexCount; ++i) {
+            fp32Normals[i].x = cgltf_accessor_read_float(normalsInfo, i, 0);
+            fp32Normals[i].y = cgltf_accessor_read_float(normalsInfo, i, 1);
+            fp32Normals[i].z = cgltf_accessor_read_float(normalsInfo, i, 2);
+        }
         if (tangentsInfo) {
             assert(tangentsInfo->count == vertexCount);
             assert(tangentsInfo->type == cgltf_type_vec4);
-            cgltf_accessor_convert_buffer_data(tangentsInfo, tangentsBlob, &fp32Tangents.data()->x);
+            for (cgltf_size i = 0; i < vertexCount; ++i) {
+                fp32Tangents[i].x = cgltf_accessor_read_float(tangentsInfo, i, 0);
+                fp32Tangents[i].y = cgltf_accessor_read_float(tangentsInfo, i, 1);
+                fp32Tangents[i].z = cgltf_accessor_read_float(tangentsInfo, i, 2);
+                fp32Tangents[i].w = cgltf_accessor_read_float(tangentsInfo, i, 3);
+            }
         }
 
         // Compute surface orientation quaternions.
