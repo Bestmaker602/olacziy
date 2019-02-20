@@ -24,6 +24,8 @@
 
 #include <tsl/robin_map.h>
 
+#include <array>
+
 namespace gltfio {
 namespace details {
 
@@ -51,21 +53,27 @@ struct MaterialKey {
     float alphaMaskThreshold;
 };
 
-// The MaterialGenerator uses filamat to generate properly configured Filament materials that each
-// make the required number of texture lookups. This complexity could be avoided if we were to use
-// an ubershader approach, but this allows us to generate efficient and streamlined shaders that
-// have no branching.
+// Define a mapping from a uv set index in the source asset to one of Filament's uv sets.
+enum UvSet : uint8_t { UNUSED, UV0, UV1 };
+using UvMap = std::array<UvSet, 8>;
+
+// The MaterialGenerator uses filamat to generate materials that each unconditionally make the
+// minimum number of texture lookups. This complexity could be avoided if we were to use an
+// ubershader approach, but this allows us to generate efficient and streamlined shaders that have
+// no branching.
 class MaterialGenerator final {
 public:
     MaterialGenerator(filament::Engine* engine);
 
-    // The passed-in cache key might be mutated by the implementation due to resource constraints.
-    // For example, Filament only allows two sets of UV coordinates but glTF allows five.
-    filament::Material* getOrCreateMaterial(MaterialKey* config);
+    // Creates or fetches a compiled Filament material. The given configuration key might be mutated
+    // due to resource constraints. The second argument is populated with a small table that maps
+    // from a glTF uv index to a Filament uv index.
+    filament::Material* getOrCreateMaterial(MaterialKey* config, UvMap* uvmap);
 
     size_t getMaterialsCount() const noexcept;
     const filament::Material* const* getMaterials() const noexcept;
     void destroyMaterials();
+
 private:
     using HashFn = utils::hash::MurmurHashFn<MaterialKey>;
     struct EqualFn { bool operator()(const MaterialKey& k1, const MaterialKey& k2) const; };

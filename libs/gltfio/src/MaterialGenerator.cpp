@@ -48,7 +48,9 @@ bool MaterialGenerator::EqualFn::operator()(const MaterialKey& k1, const Materia
         (k1.alphaMaskThreshold == k2.alphaMaskThreshold);
 }
 
-MaterialGenerator::MaterialGenerator(Engine* engine) : mEngine(engine) {}
+MaterialGenerator::MaterialGenerator(Engine* engine) : mEngine(engine) {
+    MaterialBuilder::init();
+}
 
 size_t MaterialGenerator::getMaterialsCount() const noexcept {
     return mMaterials.size();
@@ -66,21 +68,31 @@ void MaterialGenerator::destroyMaterials() {
     mCache.clear();
 }
 
-static std::string shaderFromKey(MaterialKey config) {
-    const auto normalUV = std::to_string(config.normalUV);
-    const auto baseColorUV = std::to_string(config.baseColorUV);
-    const auto metallicRoughnessUV = std::to_string(config.metallicRoughnessUV);
-    const auto emissiveUV = std::to_string(config.emissiveUV);
-    const auto aoUV = std::to_string(config.aoUV);
+static std::string shaderFromKey(const MaterialKey& config, const UvMap& uvmap) {
+    const auto normalUV = std::to_string(uvmap[config.normalUV] - 1);
+    const auto baseColorUV = std::to_string(uvmap[config.baseColorUV] - 1);
+    const auto metallicRoughnessUV = std::to_string(uvmap[config.metallicRoughnessUV] - 1);
+    const auto emissiveUV = std::to_string(uvmap[config.emissiveUV] - 1);
+    const auto aoUV = std::to_string(uvmap[config.aoUV] - 1);
 
     std::string shader = R"SHADER(
+
+        // Sigh, assimp flips texture coords in its glTF2Importer, but we're not using assimp so we
+        // need to flip them here. TODO: We should flip the image data fed to GL, not the UV's.
+        #if defined(HAS_ATTRIBUTE_UV0)
+        float2 uv0() { vec2 uv = getUV0(); uv.y = 1.0 - uv.y; return uv; }
+        #endif
+        #if defined(HAS_ATTRIBUTE_UV1)
+        float2 uv1() { vec2 uv = getUV1(); uv.y = 1.0 - uv.y; return uv; }
+        #endif
+
         void material(inout MaterialInputs material) {
     )SHADER";
 
     // TODO: apply materialParams_normalScale and materialParams_aoStrength
 
     if (config.hasNormalTexture && !config.unlit) {
-        shader += "float2 normalUV = getUV" + normalUV + "();\n";
+        shader += "float2 normalUV = uv" + normalUV + "();\n";
         shader += R"SHADER(
             material.normal = texture(materialParams_normalMap, normalUV).xyz * 2.0 - 1.0;
             material.normal.y = -material.normal.y;
@@ -93,7 +105,7 @@ static std::string shaderFromKey(MaterialKey config) {
     )SHADER";
 
     if (config.hasBaseColorTexture) {
-        shader += "float2 baseColorUV = getUV" + baseColorUV + "();\n";
+        shader += "float2 baseColorUV = uv" + baseColorUV + "();\n";
         shader += R"SHADER(
             material.baseColor *= texture(materialParams_baseColorMap, baseColorUV);
         )SHADER";
@@ -112,7 +124,7 @@ static std::string shaderFromKey(MaterialKey config) {
             material.emissive.rgb = materialParams.emissiveFactor.rgb;
         )SHADER";
         if (config.hasMetallicRoughnessTexture) {
-            shader += "float2 metallicRoughnessUV = getUV" + metallicRoughnessUV + "();\n";
+            shader += "float2 metallicRoughnessUV = uv" + metallicRoughnessUV + "();\n";
             shader += R"SHADER(
                 vec4 roughness = texture(materialParams_metallicRoughnessMap, metallicRoughnessUV);
                 material.roughness *= roughness.g;
@@ -120,13 +132,13 @@ static std::string shaderFromKey(MaterialKey config) {
             )SHADER";
         }
         if (config.hasOcclusionTexture) {
-            shader += "float2 aoUV = getUV" + aoUV + "();\n";
+            shader += "float2 aoUV = uv" + aoUV + "();\n";
             shader += R"SHADER(
                 material.ambientOcclusion = texture(materialParams_occlusionMap, aoUV).r;
             )SHADER";
         }
         if (config.hasEmissiveTexture) {
-            shader += "float2 emissiveUV = getUV" + emissiveUV + "();\n";
+            shader += "float2 emissiveUV = uv" + emissiveUV + "();\n";
             shader += R"SHADER(
                 material.emissive *= texture(materialParams_emissiveMap, emissiveUV);
             )SHADER";
@@ -137,50 +149,62 @@ static std::string shaderFromKey(MaterialKey config) {
     return shader;
 }
 
-static Material* createMaterial(Engine* engine, MaterialKey& config) {
-
-    // Filament only supports 2 UV sets while glTF supports 5. In practice this usually doesn't
-    // matter, just print a warning and drop textures gracefully.
-    uint8_t maxUVIndex = std::max({config.baseColorUV, config.metallicRoughnessUV,
-            config.emissiveUV, config.aoUV, config.normalUV});
-    if (maxUVIndex > 1) {
-        slog.w << "More than two UV sets are not supported.\n";
-        if (config.baseColorUV > 1) {
-            config.hasBaseColorTexture = false;
-        }
-        if (config.metallicRoughnessUV > 1) {
-            config.hasMetallicRoughnessTexture = false;
-        }
-        if (config.normalUV > 1) {
-            config.hasNormalTexture = false;
-        }
-        if (config.aoUV > 1) {
-            config.hasOcclusionTexture = false;
-        }
-        if (config.emissiveUV > 1) {
-            config.hasEmissiveTexture = false;
+// Filament supports up to 2 UV sets. glTF has arbitrary texcoord set indices, but it allows
+// implementations to support only 2 simultaneous sets. Here we build a mapping table with 1-based
+// indices where 0 means unused. Note that the order in which we drop textures can affect the look
+// of certain assets. This "order of degradation" is stipulated by the glTF 2.0 specification.
+static void constrainMaterial(MaterialKey* key, UvMap* uvmap) {
+    const int MAX_INDEX = 2;
+    UvMap retval {};
+    int index = 1;
+    if (key->hasBaseColorTexture) {
+        retval[key->baseColorUV] = (UvSet) index++;
+    }
+    if (key->hasMetallicRoughnessTexture && retval[key->metallicRoughnessUV] == UNUSED) {
+        retval[key->metallicRoughnessUV] = (UvSet) index++;
+    }
+    if (key->hasNormalTexture && retval[key->normalUV] == UNUSED) {
+        if (index > MAX_INDEX) {
+            key->hasNormalTexture = false;
+        } else {
+            retval[key->normalUV] = (UvSet) index++;
         }
     }
+    if (key->hasOcclusionTexture && retval[key->aoUV] == UNUSED) {
+        if (index > MAX_INDEX) {
+            key->hasOcclusionTexture = false;
+        } else {
+            retval[key->aoUV] = (UvSet) index++;
+        }
+    }
+    if (key->hasEmissiveTexture && retval[key->emissiveUV] == UNUSED) {
+        if (index > MAX_INDEX) {
+            key->hasEmissiveTexture = false;
+        } else {
+            retval[key->emissiveUV] = (UvSet) index++;
+        }
+    }
+    *uvmap = retval;
+}
 
-    int numTextures = 0;
-    if (config.hasBaseColorTexture) ++numTextures;
-    if (config.hasMetallicRoughnessTexture) ++numTextures;
-    if (config.hasNormalTexture) ++numTextures;
-    if (config.hasOcclusionTexture) ++numTextures;
-    if (config.hasEmissiveTexture) ++numTextures;
-
-    std::string shader = shaderFromKey(config);
+static Material* createMaterial(Engine* engine, const MaterialKey& config, const UvMap& uvmap) {
+    std::string shader = shaderFromKey(config, uvmap);
     MaterialBuilder builder = MaterialBuilder()
             .name("material")
             .material(shader.c_str())
-            .culling(MaterialBuilder::CullingMode::NONE) // TODO depend on doubleSided
-            .doubleSided(config.doubleSided);
+            .culling(MaterialBuilder::CullingMode::BACK) // TODO depend on doubleSided
+            .doubleSided(false);
 
+    auto uvset = (uint8_t*) &uvmap.front();
+    static_assert(std::tuple_size<UvMap>::value == 8, "Badly sized uvset.");
+    int numTextures = std::max({
+        uvset[0], uvset[1], uvset[2], uvset[3],
+        uvset[4], uvset[5], uvset[6], uvset[7],
+    });
     if (numTextures > 0) {
         builder.require(VertexAttribute::UV0);
     }
-
-    if (maxUVIndex > 0) {
+    if (numTextures > 1) {
         builder.require(VertexAttribute::UV1);
     }
 
@@ -235,10 +259,11 @@ static Material* createMaterial(Engine* engine, MaterialKey& config) {
     return Material::Builder().package(pkg.getData(), pkg.getSize()).build(*engine);
 }
 
-Material* MaterialGenerator::getOrCreateMaterial(MaterialKey* config) {
+Material* MaterialGenerator::getOrCreateMaterial(MaterialKey* config, UvMap* uvmap) {
+    constrainMaterial(config, uvmap);
     auto iter = mCache.find(*config);
     if (iter == mCache.end()) {
-        Material* mat = createMaterial(mEngine, *config);
+        Material* mat = createMaterial(mEngine, *config, *uvmap);
         mCache.emplace(std::make_pair(*config, mat));
         mMaterials.push_back(mat);
         return mat;

@@ -27,6 +27,7 @@
 #include <filament/Material.h>
 #include <filament/RenderableManager.h>
 #include <filament/Scene.h>
+#include <filament/TextureSampler.h>
 #include <filament/TransformManager.h>
 #include <filament/VertexBuffer.h>
 
@@ -124,10 +125,10 @@ struct FAssetLoader : public AssetLoader {
     void createAsset(const cgltf_data* srcAsset);
     void createEntity(const cgltf_node* node, Entity parent);
     void createRenderable(const cgltf_node* node, Entity entity);
-    bool createPrimitive(const cgltf_primitive* inPrim, Primitive* outPrim);
-    MaterialInstance* createMaterialInstance(const cgltf_material* inputMat);
+    bool createPrimitive(const cgltf_primitive* inPrim, Primitive* outPrim, const UvMap& uvmap);
+    MaterialInstance* createMaterialInstance(const cgltf_material* inputMat, UvMap* uvmap);
     void addTextureBinding(MaterialInstance* materialInstance, const char* parameterName,
-            const cgltf_texture* srcTexture);
+            const cgltf_texture* srcTexture, bool srgb);
     void createAnimationBuffer();
     void createOrientationBuffer();
     void importSkinningData(Skin& dstSkin, const cgltf_skin& srcSkin);
@@ -293,8 +294,13 @@ void FAssetLoader::createRenderable(const cgltf_node* node, Entity entity) {
             slog.e << "Unsupported primitive type." << io::endl;
         }
 
+        // Create a material instance for this primitive or fetch one from the cache.
+        UvMap uvmap;
+        MaterialInstance* mi = createMaterialInstance(inputPrim->material, &uvmap);
+        builder.material(index, mi);
+
         // Create a Filament VertexBuffer and IndexBuffer for this prim if we haven't already.
-        if (!outputPrim->vertices && !createPrimitive(inputPrim, outputPrim)) {
+        if (!outputPrim->vertices && !createPrimitive(inputPrim, outputPrim, uvmap)) {
             mError = true;
             continue;
         }
@@ -308,10 +314,6 @@ void FAssetLoader::createRenderable(const cgltf_node* node, Entity entity) {
         // facilities for these parameters, which is not a huge loss since some of the buffer
         // view and accessor features already have this functionality.
         builder.geometry(index, primType, outputPrim->vertices, outputPrim->indices);
-
-        // Create a material instance for this primitive or fetch one from the cache.
-        MaterialInstance* mi = createMaterialInstance(inputPrim->material);
-        builder.material(index, mi);
     }
 
     // Expand the world-space bounding box.
@@ -343,7 +345,8 @@ void FAssetLoader::createRenderable(const cgltf_node* node, Entity entity) {
     // TODO: honor mesh->weights and weight_count for morphing
 }
 
-bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* outPrim) {
+bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* outPrim,
+        const UvMap& uvmap) {
     const cgltf_accessor* indicesAccessor = inPrim->indices;
     if (!indicesAccessor) {
         // TODO: generate a trivial index buffer to be spec-compliant
@@ -398,13 +401,35 @@ bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* out
         // At a minimum, surface orientation requires normals to be present in the source data.
         // Here we re-purpose the normals slot to point to the quats that get computed later.
         if (inputAttribute.type == cgltf_attribute_type_normal) {
-            vbb.attribute(VertexAttribute::TANGENTS, slot, VertexBuffer::AttributeType::HALF4);
+            vbb.attribute(VertexAttribute::TANGENTS, slot, VertexBuffer::AttributeType::SHORT4);
+            vbb.normalized(VertexAttribute::TANGENTS);
             continue;
         }
 
-        // The glTF tangent data is mostly ignored here, but honored in ResourceLoader.
+        // The glTF tangent data is ignored here, but honored in ResourceLoader.
         if (inputAttribute.type == cgltf_attribute_type_tangent) {
             continue;
+        }
+
+        // Translate the cgltf attribute enum into a Filament enum and ignore all uv sets
+        // that do not have entries in the mapping table.
+        VertexAttribute semantic;
+        if (!getVertexAttrType(inputAttribute.type, &semantic)) {
+            utils::slog.e << "Unrecognized vertex semantic." << utils::io::endl;
+            return false;
+        }
+        UvSet uvset = uvmap[inputAttribute.index];
+        if (inputAttribute.type == cgltf_attribute_type_texcoord) {
+            switch (uvset) {
+                case UV0:
+                    semantic = VertexAttribute::UV0;
+                    break;
+                case UV1:
+                    semantic = VertexAttribute::UV1;
+                    break;
+                case UNUSED:
+                    continue;
+            }
         }
 
         // This will needlessly set the same vertex count multiple times, which should be fine.
@@ -419,11 +444,6 @@ bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* out
             outPrim->aabb.max = max(outPrim->aabb.max, float3(maxp[0], maxp[1], maxp[2]));
         }
 
-        VertexAttribute semantic;
-        if (!getVertexAttrType(inputAttribute.type, &semantic)) {
-            utils::slog.e << "Unrecognized vertex semantic." << utils::io::endl;
-            return false;
-        }
         VertexBuffer::AttributeType atype;
         if (!getElementType(inputAccessor->type, inputAccessor->component_type, &atype)) {
             slog.e << "Unsupported accessor type." << io::endl;
@@ -471,7 +491,8 @@ bool FAssetLoader::createPrimitive(const cgltf_primitive* inPrim, Primitive* out
     return true;
 }
 
-MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inputMat) {
+MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inputMat,
+        UvMap* uvmap) {
     auto iter = mMatInstanceCache.find(inputMat);
     if (iter != mMatInstanceCache.end()) {
         return iter->second;
@@ -482,7 +503,7 @@ MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inp
         MaterialKey matkey {
             .unlit = true
         };
-        Material* mat = mMaterials.getOrCreateMaterial(&matkey);
+        Material* mat = mMaterials.getOrCreateMaterial(&matkey, uvmap);
         MaterialInstance* mi = mat->createInstance();
         mResult->mMaterialInstances.push_back(mi);
         return mMatInstanceCache[nullptr] = mi;
@@ -513,7 +534,11 @@ MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inp
         slog.w << "pbrSpecularGlossiness textures are not supported." << io::endl;
     }
 
-    Material* mat = mMaterials.getOrCreateMaterial(&matkey);
+    // This not only creates (or fetches) a material, it modifies the material key according to
+    // our rendering constraints. For example, Filament only supports 2 sets of texture coordinates.
+    Material* mat = mMaterials.getOrCreateMaterial(&matkey, uvmap);
+
+    // Create an instance of the material that has a unique set of texture bindings etc.
     MaterialInstance* mi = mat->createInstance();
     mResult->mMaterialInstances.push_back(mi);
 
@@ -530,49 +555,63 @@ MaterialInstance* FAssetLoader::createMaterialInstance(const cgltf_material* inp
     }
 
     if (matkey.hasBaseColorTexture) {
-        addTextureBinding(mi, "baseColorMap", pbr_config.base_color_texture.texture);
+        addTextureBinding(mi, "baseColorMap", pbr_config.base_color_texture.texture, true);
     }
 
     if (matkey.hasMetallicRoughnessTexture) {
         addTextureBinding(mi, "metallicRoughnessMap",
-                pbr_config.metallic_roughness_texture.texture);
+                pbr_config.metallic_roughness_texture.texture, false);
     }
 
     if (matkey.hasNormalTexture) {
-        addTextureBinding(mi, "normalMap", inputMat->normal_texture.texture);
+        addTextureBinding(mi, "normalMap", inputMat->normal_texture.texture, false);
     }
 
     if (matkey.hasOcclusionTexture) {
-        addTextureBinding(mi, "occlusionMap", inputMat->occlusion_texture.texture);
+        addTextureBinding(mi, "occlusionMap", inputMat->occlusion_texture.texture, false);
     }
 
     if (matkey.hasEmissiveTexture) {
-        addTextureBinding(mi, "emissiveMap", inputMat->emissive_texture.texture);
+        addTextureBinding(mi, "emissiveMap", inputMat->emissive_texture.texture, true);
     }
 
     return mMatInstanceCache[inputMat] = mi;
 }
 
 void FAssetLoader::addTextureBinding(MaterialInstance* materialInstance, const char* parameterName,
-        const cgltf_texture* srcTexture) {
+        const cgltf_texture* srcTexture, bool srgb) {
     if (!srcTexture->image) {
         slog.w << "Texture is missing image (" << srcTexture->name << ")." << io::endl;
         return;
     }
-    filament::TextureSampler dstSampler;
+    TextureSampler dstSampler;
     auto srcSampler = srcTexture->sampler;
     if (srcSampler) {
         dstSampler.setWrapModeS(getWrapMode(srcSampler->wrap_s));
         dstSampler.setWrapModeT(getWrapMode(srcSampler->wrap_t));
         dstSampler.setMagFilter(getMagFilter(srcSampler->mag_filter));
         dstSampler.setMinFilter(getMinFilter(srcSampler->min_filter));
+    } else {
+        // These defaults are stipulated by the spec:
+        dstSampler.setWrapModeS(TextureSampler::WrapMode::REPEAT);
+        dstSampler.setWrapModeT(TextureSampler::WrapMode::REPEAT);
+
+        // These defaults are up the implementation but since we generate mipmaps unconditionally,
+        // we might as well use them. In practice the conformance models look awful without
+        // using mipmapping by default.
+        dstSampler.setMagFilter(TextureSampler::MagFilter::LINEAR);
+        dstSampler.setMinFilter(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR);
     }
+    auto bv = srcTexture->image->buffer_view;
     mResult->mTextureBindings.push_back(TextureBinding {
         .uri = srcTexture->image->uri,
+        .totalSize = uint32_t(bv ? bv->buffer->size : 0),
         .mimeType = srcTexture->image->mime_type,
+        .data = bv ? &bv->buffer->data : nullptr,
         .materialInstance = materialInstance,
         .materialParameter = parameterName,
-        .sampler = dstSampler
+        .sampler = dstSampler,
+        .srgb = srgb
     });
 }
 

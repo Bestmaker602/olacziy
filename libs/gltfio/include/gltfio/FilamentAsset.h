@@ -137,10 +137,13 @@ struct BufferBinding {
 /** Describes a binding from a Texture to a MaterialInstance. */
 struct TextureBinding {
     const char* uri;
+    uint32_t totalSize;
     const char* mimeType;
+    void** data;
     filament::MaterialInstance* materialInstance;
     const char* materialParameter;
     filament::TextureSampler sampler;
+    bool srgb;
 };
 
 } // namespace gltfio

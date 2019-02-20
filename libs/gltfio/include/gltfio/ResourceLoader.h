@@ -29,9 +29,8 @@ namespace gltfio {
 
 namespace details {
     class FFilamentAsset;
+    class AssetPool;
 }
-
-class BlobCache;
 
 /**
  * ResourceLoader asynchronously uploads vertex buffers and textures to the GPU and computes
@@ -48,7 +47,6 @@ class BlobCache;
  * listens to BufferDescriptor callbacks in order to determine when to free CPU-side data blobs.
  *
  * TODO: the GPU upload is asynchronous but the load-from-disk and image decode is not.
- * TODO: using this class is required for proper tangent quaternions, ideally it would be optional.
  */
 class ResourceLoader {
 public:
@@ -57,7 +55,8 @@ public:
     bool loadResources(FilamentAsset* asset);
 private:
     void computeTangents(const details::FFilamentAsset* asset);
-    BlobCache* mCache;
+    bool createTextures(const details::FFilamentAsset* asset);
+    details::AssetPool* mPool;
     filament::Engine* mEngine;
     utils::Path mBasePath;
 };
