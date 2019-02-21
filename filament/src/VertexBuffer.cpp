@@ -239,6 +239,8 @@ void VertexBuffer::populateTangentQuaternions(const QuatTangentContext& ctx) {
     uint8_t* outquat = (uint8_t*) ctx.outBuffer;
 
     // If tangents are not provided, simply cross N with arbitrary vector (1, 0, 0)
+    // TODO: we should look at UV coordinates in this situation in order to be compliant with de
+    // facto glTF rules and pass the NormalTangentTest.
     if (!ctx.tangents) {
         for (size_t qindex = 0, qcount = ctx.quatCount; qindex < qcount; ++qindex) {
             float3 n = *normal;
@@ -258,7 +260,7 @@ void VertexBuffer::populateTangentQuaternions(const QuatTangentContext& ctx) {
     for (size_t qindex = 0, qcount = ctx.quatCount; qindex < qcount; ++qindex) {
         float3 n = *normal;
         float3 t = *tanvec;
-        float3 b = *tandir > 0 ? cross(t, n) : cross(n, t);
+        float3 b = *tandir < 0 ? cross(t, n) : cross(n, t);
         writeQuat(mat3f::packTangentFrame({t, b, n}), outquat);
         normal = (const float3*) (((const uint8_t*) normal) + nstride);
         tanvec = (const float3*) (((const uint8_t*) tanvec) + tstride);
