@@ -331,7 +331,7 @@ void FAssetLoader::createRenderable(const cgltf_node* node, Entity entity) {
     mResult->mBoundingBox.max = max(mResult->mBoundingBox.max, maxpt);
 
     if (node->skin) {
-        builder.skinning(node->skin->joints_count);
+//        builder.skinning(node->skin->joints_count);
     }
 
     builder

@@ -142,7 +142,6 @@ int main(int argc, char** argv) {
     }
 
     auto setup = [&app, filename](Engine* engine, View* view, Scene* scene) {
-        FilamentApp::get().getIBL()->getIndirectLight()->setIntensity(100000);
         app.loader = AssetLoader::create(engine);
         if (filename.isEmpty()) {
             return;
@@ -208,7 +207,7 @@ int main(int argc, char** argv) {
         if (app.animator->getAnimationCount() > 0) {
             app.animator->applyAnimation(0, now);
         }
-        app.animator->updateBoneMatrices();
+        // app.animator->updateBoneMatrices();
     };
 
     FilamentApp& filamentApp = FilamentApp::get();
