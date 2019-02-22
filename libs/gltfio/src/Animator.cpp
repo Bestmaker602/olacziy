@@ -31,8 +31,6 @@
 #include <math/vec3.h>
 #include <math/vec4.h>
 
-#include <tsl/robin_map.h>
-
 #include <map>
 #include <string>
 #include <vector>
@@ -48,7 +46,6 @@ using namespace details;
 
 using TimeValues = std::map<float, size_t>;
 using SourceValues = std::vector<float>;
-using UrlMap = tsl::robin_map<std::string, const uint8_t*>;
 
 struct Sampler {
     TimeValues times;
@@ -125,10 +122,10 @@ static void convert32F(const cgltf_accessor* src, const uint8_t* srcBlob, Source
     memcpy(dst.data(), srcBlob, dst.size() * sizeof(float));
 }
 
-static void createSampler(const cgltf_animation_sampler& src, Sampler& dst, const UrlMap& blobs) {
+static void createSampler(const cgltf_animation_sampler& src, Sampler& dst) {
     // Copy the time values into a red-black tree.
     const cgltf_accessor* timelineAccessor = src.input;
-    const uint8_t* timelineBlob = blobs.at(timelineAccessor->buffer_view->buffer->uri);
+    const uint8_t* timelineBlob = (const uint8_t*) timelineAccessor->buffer_view->buffer->data;
     const float* timelineFloats = (const float*) (timelineBlob + timelineAccessor->offset +
             timelineAccessor->buffer_view->offset);
     for (size_t i = 0, len = timelineAccessor->count; i < len; ++i) {
@@ -137,7 +134,7 @@ static void createSampler(const cgltf_animation_sampler& src, Sampler& dst, cons
 
     // Convert source data to float.
     const cgltf_accessor* valuesAccessor = src.output;
-    const uint8_t* valuesBlob = blobs.at(valuesAccessor->buffer_view->buffer->uri);
+    const uint8_t* valuesBlob = (const uint8_t*) valuesAccessor->buffer_view->buffer->data;
     switch (valuesAccessor->component_type) {
         case cgltf_component_type_r_8:
             convert8(valuesAccessor, valuesBlob, dst.values);
@@ -196,16 +193,6 @@ Animator::Animator(FilamentAsset* publicAsset) {
     mImpl->renderableManager = &asset->mEngine->getRenderableManager();
     mImpl->transformManager = &asset->mEngine->getTransformManager();
 
-    // Build a map of URI strings to blob pointers. TODO: can the key be const char* ?
-    UrlMap blobs;
-    const BufferBinding* bindings = asset->getBufferBindings();
-    for (size_t i = 0, n = asset->getBufferBindingCount(); i < n; ++i) {
-        auto bb = bindings[i];
-        if (bb.animationBuffer) {
-            blobs[bb.uri] = bb.animationBuffer;
-        }
-    }
-
     // Loop over the glTF animation definitions.
     const cgltf_data* srcAsset = asset->mSourceAsset;
     const cgltf_animation* srcAnims = srcAsset->animations;
@@ -224,7 +211,7 @@ Animator::Animator(FilamentAsset* publicAsset) {
         for (cgltf_size j = 0, nsamps = srcAnim.samplers_count; j < nsamps; ++j) {
             const cgltf_animation_sampler& srcSampler = srcSamplers[j];
             Sampler& dstSampler = dstAnim.samplers[j];
-            createSampler(srcSampler, dstSampler, blobs);
+            createSampler(srcSampler, dstSampler);
             if (dstSampler.times.size() > 1) {
                 float maxtime = (--dstSampler.times.end())->first;
                 dstAnim.duration = std::max(dstAnim.duration, maxtime);
@@ -325,7 +312,6 @@ void Animator::updateBoneMatrices() {
         boneMatrices.resize(skin.joints.size());
         size_t boneIndex = 0;
         for (const auto& joint : skin.joints) {
-            // TODO: honor skin.skeleton, implies adding getAncestorTransform to TransformManager
             boneMatrices[boneIndex++] = mImpl->transformManager->getWorldTransform(joint);
         }
         boneIndex = 0;

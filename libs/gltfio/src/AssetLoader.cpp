@@ -129,8 +129,6 @@ struct FAssetLoader : public AssetLoader {
     MaterialInstance* createMaterialInstance(const cgltf_material* inputMat, UvMap* uvmap);
     void addTextureBinding(MaterialInstance* materialInstance, const char* parameterName,
             const cgltf_texture* srcTexture, bool srgb);
-    void createAnimationBuffer();
-    void createOrientationBuffer();
     void importSkinningData(Skin& dstSkin, const cgltf_skin& srcSkin);
 
     bool mCastShadows = true;
@@ -205,14 +203,6 @@ void FAssetLoader::createAsset(const cgltf_data* srcAsset) {
         delete mResult;
         mResult = nullptr;
     }
-
-    // Find all sampler buffers and create buffer bindings for them so that they aggregate
-    // into a single CPU-side "animation buffer".
-    createAnimationBuffer();
-
-    // Find all primitives with normals (and, optionally, tangents) and create buffer bindings for
-    // them so that they aggregate into a single CPU-side "orientation buffer".
-    createOrientationBuffer();
 
     // Copy over joint lists (references to TransformManager components) and create buffer bindings
     // for inverseBindMatrices.
@@ -615,86 +605,6 @@ void FAssetLoader::addTextureBinding(MaterialInstance* materialInstance, const c
     });
 }
 
-void FAssetLoader::createAnimationBuffer() {
-    const cgltf_data* srcAsset = mResult->mSourceAsset;
-    tsl::robin_set<const cgltf_buffer*> srcBuffers;
-
-    // Find the set of all sampler buffers.
-    const cgltf_animation* anims = srcAsset->animations;
-    for (cgltf_size i = 0, len = srcAsset->animations_count; i < len; ++i) {
-        const cgltf_animation_sampler* samplers = anims[i].samplers;
-        for (cgltf_size j = 0, nsamps = anims[i].samplers_count; j < nsamps; ++j) {
-            srcBuffers.insert(samplers[j].input->buffer_view->buffer);
-            srcBuffers.insert(samplers[j].output->buffer_view->buffer);
-        }
-    }
-
-    // Allocate a monolithic CPU-side buffer for holding keyframe values.
-    uint32_t total = 0;
-    for (auto buffer : srcBuffers) {
-        total += buffer->size;
-    }
-    mResult->mAnimationBuffer.resize(total);
-    uint8_t* dstBuffer = mResult->mAnimationBuffer.data();
-
-    // Add bindings that copy an entire source blob into a region within the animation buffer.
-    for (auto srcBuffer : srcBuffers) {
-        mResult->mBufferBindings.emplace_back(BufferBinding {
-            .uri = srcBuffer->uri,
-            .size = uint32_t(srcBuffer->size),
-            .totalSize = uint32_t(srcBuffer->size),
-            .data = (void**) &srcBuffer->data,
-            .animationBuffer = dstBuffer
-        });
-        dstBuffer += srcBuffer->size;
-    }
-}
-
-void FAssetLoader::createOrientationBuffer() {
-    tsl::robin_set<const cgltf_buffer*> srcBuffers;
-
-    // Find the set of all buffers that hold normals or tangents.
-    auto gatherOrientationData = [&srcBuffers](const cgltf_primitive& prim) {
-        for (cgltf_size slot = 0; slot < prim.attributes_count; slot++) {
-            const cgltf_attribute& attr = prim.attributes[slot];
-            if (attr.type == cgltf_attribute_type_tangent ||
-                    attr.type == cgltf_attribute_type_normal) {
-                srcBuffers.insert(attr.data->buffer_view->buffer);
-                continue;
-            }
-        }
-    };
-    for (auto iter : mResult->mNodeMap) {
-        const cgltf_mesh* mesh = iter.first->mesh;
-        if (mesh) {
-            cgltf_size nprims = mesh->primitives_count;
-            for (cgltf_size index = 0; index < nprims; ++index) {
-                gatherOrientationData(mesh->primitives[index]);
-            }
-        }
-    }
-
-    // Allocate a monolithic CPU-side buffer for holding normals and tangents.
-    uint32_t total = 0;
-    for (auto buffer : srcBuffers) {
-        total += buffer->size;
-    }
-    mResult->mOrientationBuffer.resize(total);
-    uint8_t* dstBuffer = mResult->mOrientationBuffer.data();
-
-    // Add bindings that copy an entire source blob into a region within the orientation buffer.
-    for (auto srcBuffer : srcBuffers) {
-        mResult->mBufferBindings.emplace_back(BufferBinding {
-            .uri = srcBuffer->uri,
-            .size = uint32_t(srcBuffer->size),
-            .totalSize = uint32_t(srcBuffer->size),
-            .data = (void**) &srcBuffer->data,
-            .orientationBuffer = dstBuffer
-        });
-        dstBuffer += srcBuffer->size;
-    }
-}
-
 void FAssetLoader::importSkinningData(Skin& dstSkin, const cgltf_skin& srcSkin) {
     if (srcSkin.name) {
         dstSkin.name = srcSkin.name;
@@ -705,26 +615,6 @@ void FAssetLoader::importSkinningData(Skin& dstSkin, const cgltf_skin& srcSkin) 
     const auto& nodeMap = mResult->mNodeMap;
     for (cgltf_size i = 0, len = srcSkin.joints_count; i < len; ++i) {
         dstSkin.joints[i] = mTransformManager.getInstance(nodeMap.at(srcSkin.joints[i]));
-    }
-    if (srcSkin.skeleton) {
-        dstSkin.skeleton = mTransformManager.getInstance(nodeMap.at(srcSkin.skeleton));
-    }
-
-    // If inverse bind matrices are specified, then allocate storage and create a buffer binding.
-    const cgltf_accessor* srcMatrices = srcSkin.inverse_bind_matrices;
-    if (srcMatrices) {
-        dstSkin.inverseBindMatrices.resize(srcSkin.joints_count);
-        auto dstMatrices = (uint8_t*) dstSkin.inverseBindMatrices.data();
-        auto srcBuffer = srcMatrices->buffer_view->buffer;
-        assert(srcSkin.joints_count == srcMatrices->count);
-        mResult->mBufferBindings.emplace_back(BufferBinding {
-            .uri = srcBuffer->uri,
-            .size = uint32_t(srcSkin.joints_count * sizeof(mat4f)),
-            .totalSize = uint32_t(srcBuffer->size),
-            .data = (void**) &srcBuffer->data,
-            .animationBuffer = dstMatrices,
-            .offset = uint32_t(srcMatrices->offset + srcMatrices->buffer_view->offset)
-        });
     }
 }
 

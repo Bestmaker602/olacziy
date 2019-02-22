@@ -45,7 +45,6 @@ namespace details {
 
 struct Skin {
     std::string name;
-    filament::TransformManager::Instance skeleton;
     std::vector<filament::math::mat4f> inverseBindMatrices;
     std::vector<filament::TransformManager::Instance> joints;
     std::vector<filament::RenderableManager::Instance> targets;
@@ -118,10 +117,6 @@ struct FFilamentAsset : public FilamentAsset {
         mBufferBindings.shrink_to_fit();
         mTextureBindings.clear();
         mTextureBindings.shrink_to_fit();
-        mAnimationBuffer.clear();
-        mAnimationBuffer.shrink_to_fit();
-        mOrientationBuffer.clear();
-        mOrientationBuffer.shrink_to_fit();
         mNodeMap.clear();
         mPrimMap.clear();
         releaseSourceAsset();
@@ -151,8 +146,6 @@ struct FFilamentAsset : public FilamentAsset {
      * Transient source data that can freed via releaseSourceData(). */
     std::vector<BufferBinding> mBufferBindings;
     std::vector<TextureBinding> mTextureBindings;
-    std::vector<uint8_t> mAnimationBuffer;
-    std::vector<uint8_t> mOrientationBuffer;
     const cgltf_data* mSourceAsset = nullptr;
     tsl::robin_map<const cgltf_node*, utils::Entity> mNodeMap;
     tsl::robin_map<const cgltf_primitive*, filament::VertexBuffer*> mPrimMap;

@@ -142,7 +142,6 @@ int main(int argc, char** argv) {
     }
 
     auto setup = [&app, filename](Engine* engine, View* view, Scene* scene) {
-        FilamentApp::get().getIBL()->getIndirectLight()->setIntensity(100000);
         app.loader = AssetLoader::create(engine);
         if (filename.isEmpty()) {
             return;

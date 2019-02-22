@@ -25,6 +25,8 @@
 #include <filament/Texture.h>
 #include <filament/VertexBuffer.h>
 
+#include <geometry/SurfaceOrientation.h>
+
 #include <math/quat.h>
 #include <math/vec3.h>
 #include <math/vec4.h>
@@ -95,6 +97,16 @@ ResourceLoader::~ResourceLoader() {
     mPool->onLoaderDestroyed();
 }
 
+static void importSkinningData(Skin& dstSkin, const cgltf_skin& srcSkin) {
+    const cgltf_accessor* srcMatrices = srcSkin.inverse_bind_matrices;
+    if (srcMatrices) {
+        dstSkin.inverseBindMatrices.resize(srcSkin.joints_count);
+        auto dstMatrices = (uint8_t*) dstSkin.inverseBindMatrices.data();
+        auto srcBuffer = srcMatrices->buffer_view->buffer->data;
+        memcpy(dstMatrices, srcBuffer, srcSkin.joints_count * sizeof(mat4f));
+    }
+}
+
 bool ResourceLoader::loadResources(FilamentAsset* asset) {
     FFilamentAsset* fasset = upcast(asset);
     mPool->addAsset(fasset);
@@ -108,7 +120,7 @@ bool ResourceLoader::loadResources(FilamentAsset* asset) {
         return false;
     }
 
-    // Upload data to the GPU, or do a memcpy for animation / orientation data.
+    // Upload data to the GPU.
     const BufferBinding* bindings = asset->getBufferBindings();
     for (size_t i = 0, n = asset->getBufferBindingCount(); i < n; ++i) {
         auto bb = bindings[i];
@@ -121,20 +133,19 @@ bool ResourceLoader::loadResources(FilamentAsset* asset) {
             mPool->addPendingUpload();
             VertexBuffer::BufferDescriptor bd(ucdata, bb.size, AssetPool::onLoadedResource, mPool);
             bb.indexBuffer->setBuffer(*mEngine, std::move(bd));
-        } else if (bb.animationBuffer) {
-            memcpy(bb.animationBuffer, ucdata, bb.size);
-        } else if (bb.orientationBuffer) {
-            memcpy(bb.orientationBuffer, ucdata, bb.size);
         } else {
             slog.e << "Malformed binding: " << bb.uri << io::endl;
             return false;
         }
     }
 
-    // Compute surface orientation quaternions if necessary.
-    if (fasset->mOrientationBuffer.size() > 0) {
-        computeTangents(fasset);
+    // Copy over the inverse bind matrices to allow users to destroy the source asset.
+    for (cgltf_size i = 0, len = gltf->skins_count; i < len; ++i) {
+        importSkinningData(fasset->mSkins[i], gltf->skins[i]);
     }
+
+    // Compute surface orientation quaternions if necessary.
+    computeTangents(fasset);
 
     // Finally, load image files and create Filament Textures.
     return createTextures(fasset);
@@ -217,7 +228,6 @@ void ResourceLoader::computeTangents(const FFilamentAsset* asset) {
         for (cgltf_size slot = 0; slot < prim.attributes_count; slot++) {
             const cgltf_attribute& attr = prim.attributes[slot];
             vertexCount = attr.data->count;
-            const char* uri = attr.data->buffer_view->buffer->uri;
             if (attr.type == cgltf_attribute_type_normal) {
                 normalsSlot = slot;
                 normalsInfo = attr.data;
@@ -232,43 +242,36 @@ void ResourceLoader::computeTangents(const FFilamentAsset* asset) {
             return;
         }
 
-        // Allocate space for the input and output of the tangent computation.
-        fp32Normals.resize(vertexCount);
-        fp32Tangents.resize(tangentsInfo ? vertexCount : 0);
-        ushort4* fp16Quats = (ushort4*) malloc(sizeof(ushort4) * vertexCount);
-
         // Convert normals (and possibly tangents) into floating point.
         assert(normalsInfo->count == vertexCount);
         assert(normalsInfo->type == cgltf_type_vec3);
+        fp32Normals.resize(vertexCount);
         for (cgltf_size i = 0; i < vertexCount; ++i) {
-            fp32Normals[i].x = cgltf_accessor_read_float(normalsInfo, i, 0);
-            fp32Normals[i].y = cgltf_accessor_read_float(normalsInfo, i, 1);
-            fp32Normals[i].z = cgltf_accessor_read_float(normalsInfo, i, 2);
+            cgltf_accessor_read_float(normalsInfo, i, &fp32Normals[i].x, 3);
         }
+
         if (tangentsInfo) {
             assert(tangentsInfo->count == vertexCount);
             assert(tangentsInfo->type == cgltf_type_vec4);
+            fp32Tangents.resize(vertexCount);
             for (cgltf_size i = 0; i < vertexCount; ++i) {
-                fp32Tangents[i].x = cgltf_accessor_read_float(tangentsInfo, i, 0);
-                fp32Tangents[i].y = cgltf_accessor_read_float(tangentsInfo, i, 1);
-                fp32Tangents[i].z = cgltf_accessor_read_float(tangentsInfo, i, 2);
-                fp32Tangents[i].w = cgltf_accessor_read_float(tangentsInfo, i, 3);
+                cgltf_accessor_read_float(tangentsInfo, i, &fp32Tangents[i].x, 4);
             }
         }
 
         // Compute surface orientation quaternions.
-        VertexBuffer::QuatTangentContext ctx {
-            .quatType = VertexBuffer::SHORT4,
-            .quatCount = vertexCount,
-            .outBuffer = fp16Quats,
-            .normals = fp32Normals.data(),
-            .tangents = fp32Tangents.empty() ? nullptr : fp32Tangents.data()
-        };
-        VertexBuffer::populateTangentQuaternions(ctx);
+        short4* quats = (short4*) malloc(sizeof(short4) * vertexCount);
+        auto helper = geometry::SurfaceOrientation::Builder()
+            .vertexCount(vertexCount)
+            .normals(fp32Normals.data())
+            .tangents(fp32Tangents.data())
+            .build();
+        helper->getQuats(quats, vertexCount);
+        geometry::SurfaceOrientation::destroy(helper);
 
         // Upload quaternions to the GPU.
         auto callback = (VertexBuffer::BufferDescriptor::Callback) free;
-        VertexBuffer::BufferDescriptor bd(fp16Quats, vertexCount * sizeof(ushort4), callback);
+        VertexBuffer::BufferDescriptor bd(quats, vertexCount * sizeof(short4), callback);
         VertexBuffer* vb = asset->mPrimMap.at(&prim);
         vb->setBufferAt(*mEngine, normalsSlot, std::move(bd));
     };

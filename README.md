@@ -125,6 +125,7 @@ and tools.
   - `filagui`:             Helper library for [Dear ImGui](https://github.com/ocornut/imgui)
   - `filamat`:             Material generation library
   - `filameshio`:          Tiny filamesh parsing library (see also `tools/filamesh`)
+  - `geometry`:            Mesh-related utilities
   - `gltfio`:              Tiny glTF parsing library
   - `image`:               Image filtering and simple transforms
   - `imageio`:             Image file reading / writing, only intended for internal use

@@ -140,7 +140,8 @@ static std::string shaderFromKey(const MaterialKey& config, const UvMap& uvmap) 
         if (config.hasEmissiveTexture) {
             shader += "float2 emissiveUV = uv" + emissiveUV + "();\n";
             shader += R"SHADER(
-                material.emissive *= texture(materialParams_emissiveMap, emissiveUV);
+                material.emissive.rgb *= texture(materialParams_emissiveMap, emissiveUV).rgb;
+                material.emissive.a = 3.0;
             )SHADER";
         }
     }

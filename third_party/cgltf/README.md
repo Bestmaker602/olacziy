@@ -38,16 +38,7 @@ if (result == cgltf_result_success)
 Note that cgltf does not load the contents of extra files such as buffers or images into memory by default. You'll need to read these files yourself using URIs from `data.buffers[]` or `data.images[]` respectively.
 For buffer data, you can alternatively call `cgltf_load_buffers`, which will use `FILE*` APIs to open and read buffer files.
 
-## Reference
-`cgltf_result cgltf_parse(const cgltf_options*, const void*, cgltf_size, cgltf_data**)` parses both glTF and GLB data. If this function returns `cgltf_result_success`, you have to call `cgltf_free()` on the created `cgltf_data*` variable.
-
-`cgltf_options` is the struct passed to `cgltf_parse()` to control parts of the parsing process. You can use it to force the file type and provide memory allocation callbacks.
-
-`cgltf_data` is the struct allocated and filled by `cgltf_parse()`. It generally mirrors the glTF format as described by the spec (see https://github.com/KhronosGroup/glTF/tree/master/specification/2.0).
-
-`void cgltf_free(cgltf_data*)` frees the allocated `cgltf_data` variable.
-
-`cgltf_result cgltf_validate(cgltf_data*)` is an optional function you can call to do additional checks to make sure the parsed glTF data is valid.
+**For more in-depth documentation and a description of the public interface refer to the top of the `cgltf.h` file.**
 
 ## Support
 cgltf supports core glTF 2.0:
@@ -81,18 +72,26 @@ Everyone is welcome to contribute to the library. If you find any problems, you 
 ## Dependencies
 None.
 
-C headers being used:
+C headers being used by implementation:
 ```
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <limits.h>
 ```
 
 Note, this library has a copy of the [JSMN JSON parser](https://github.com/zserge/jsmn) embedded in its source.
 
 ## Testing
 There is a Python script in the `test/` folder that retrieves the glTF 2.0 sample files from the glTF-Sample-Models repository (https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0) and runs the library against all gltf and glb files.
+
+Here's one way to build and run the test:
+
+    cd test ; mkdir build ; cd build ; cmake .. -DCMAKE_BUILD_TYPE=Debug
+    make -j
+    cd ..
+    ./test_all.py
 
 There is also a llvm-fuzz test in `fuzz/`. See http://llvm.org/docs/LibFuzzer.html for more information.
