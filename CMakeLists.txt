@@ -349,6 +349,7 @@ add_subdirectory(${EXTERNAL}/robin-map/tnt)
 add_subdirectory(${EXTERNAL}/smol-v/tnt)
 add_subdirectory(${EXTERNAL}/benchmark/tnt)
 add_subdirectory(${EXTERNAL}/meshoptimizer)
+add_subdirectory(${EXTERNAL}/mikktspace)
 
 if (FILAMENT_BUILD_FILAMAT)
     # spirv-tools must come before filamat, as filamat relies on the presence of the
