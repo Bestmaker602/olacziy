@@ -227,7 +227,6 @@ private:
     Vector<fg::PassNode> mPassNodes;                    // list of frame graph passes
     Vector<fg::ResourceNode> mResourceNodes;            // list of resource nodes
     Vector<fg::RenderTarget> mRenderTargets;            // list of rendertarget
-    Vector<fg::Alias> mAliases;                         // list of aliases
     Vector<UniquePtr<fg::Resource>> mResourceRegistry;  // list of actual textures
     Vector<UniquePtr<fg::RenderTargetResource>> mRenderTargetCache; // list of actual rendertargets
 

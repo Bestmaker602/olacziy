@@ -634,7 +634,6 @@ FrameGraph::FrameGraph()
           mPassNodes(mArena),
           mResourceNodes(mArena),
           mRenderTargets(mArena),
-          mAliases(mArena),
           mResourceRegistry(mArena),
           mRenderTargetCache(mArena) {
 //    slog.d << "PassNode: " << sizeof(PassNode) << io::endl;
@@ -664,13 +663,59 @@ FrameGraphResource FrameGraph::createResourceNode(fg::Resource* resource) noexce
 }
 
 FrameGraphResource FrameGraph::moveResource(FrameGraphResource from, FrameGraphResource to) {
-    // this is just used to validate the 'to' handle
-    getResource(to);
+    // validate 'to' handle
+    ResourceNode& toNode = getResource(to);
+
     // validate and rename the 'from' handle
-    ResourceNode const& node = getResource(from);
-    ++node.resource->version;
-    mAliases.push_back({from, to});
-    return createResourceNode(node.resource);
+    ResourceNode const& fromNode = getResource(from);
+
+    // The 'from' resource takes the version number of the 'to' resource.
+    // e.g.: If the 'to' resource was written N times it's as if the 'from' resource is
+    // written N times now. Since writers to the 'from' resources are disconnected,
+    // nothing can write to it.
+    fromNode.resource->version = toNode.resource->version;
+
+    ++fromNode.resource->version;
+
+    // remap "to" resources to "from" resources
+    Vector<fg::ResourceNode>& resourceNodes = mResourceNodes;
+    for (ResourceNode& cur : resourceNodes) {
+        if (cur.resource == toNode.resource) {
+            cur.resource = fromNode.resource;
+        }
+    }
+
+    Vector<FrameGraphResource> sratch(mArena); // keep out of loops to avoid reallocations
+    Vector<fg::PassNode>& passNodes = mPassNodes;
+    for (PassNode& pass : passNodes) {
+        // Passes that were writing to "from node", no longer do
+        pass.writes.erase(
+                std::remove_if(pass.writes.begin(), pass.writes.end(),
+                        [index = from.index](auto handle) { return handle.index == index; }),
+                pass.writes.end());
+
+        // TODO: it's not completely clear to me what should happen to the readers of the
+        //       'from' node -- should they continue to read from these nodes?
+        //       I think they shouldn't -- effectively removing a reference from that node.
+
+        // passes that were reading from "from node", now read from "to node" as well
+        for (FrameGraphResource handle : pass.reads) {
+            if (handle.index == from.index) {
+                sratch.push_back(to.index);
+            }
+        }
+        pass.reads.insert(pass.reads.end(), sratch.begin(), sratch.end());
+        // remove duplicates that might have been created when aliasing
+        std::sort(pass.reads.begin(), pass.reads.end());
+        pass.reads.erase(std::unique(pass.reads.begin(), pass.reads.end()), pass.reads.end());
+        sratch.clear();
+    }
+
+    // TODO: this creates kind of a dangling node that is not associated to any pass - is that
+    //       a problem? in particular if we do another moveResource later that would involve
+    //       this same resource again?
+    //       Maybe the solution would be to model "moveResource" like a pass.
+    return createResourceNode(fromNode.resource);
 }
 
 void FrameGraph::present(FrameGraphResource input) {
@@ -846,49 +891,6 @@ FrameGraph& FrameGraph::compile() noexcept {
     Vector<UniquePtr<RenderTargetResource>>& renderTargetCache = mRenderTargetCache;
 
     /*
-     * remap aliased resources
-     */
-
-    if (!mAliases.empty()) {
-        Vector<FrameGraphResource> sratch(mArena); // keep out of loops to avoid reallocations
-        for (fg::Alias const& alias : mAliases) {
-            // disconnect all writes to "from"
-            ResourceNode& from = resourceNodes[alias.from.index];
-            ResourceNode& to   = resourceNodes[alias.to.index];
-
-            // remap "to" resources to "from" resources
-            for (ResourceNode& cur : resourceNodes) {
-                if (cur.resource == to.resource) {
-                    cur.resource = from.resource;
-                }
-            }
-
-            for (PassNode& pass : passNodes) {
-                // passes that were reading from "from node", now read from "to node" as well
-                for (FrameGraphResource handle : pass.reads) {
-                    if (handle.index == alias.from.index) {
-                        sratch.push_back(alias.to.index);
-                    }
-                }
-                pass.reads.insert(pass.reads.end(), sratch.begin(), sratch.end());
-                sratch.clear();
-
-                // Passes that were writing to "from node", no longer do
-                pass.writes.erase(
-                        std::remove_if(pass.writes.begin(), pass.writes.end(),
-                                [&alias](auto handle) { return handle.index == alias.from.index; }),
-                        pass.writes.end());
-            }
-        }
-
-        // remove duplicates that might have been created when aliasing
-        for (PassNode& pass : passNodes) {
-            std::sort(pass.reads.begin(), pass.reads.end());
-            pass.reads.erase(std::unique(pass.reads.begin(), pass.reads.end()), pass.reads.end());
-        }
-    }
-
-    /*
      * compute passes and resource reference counts
      */
 
@@ -1051,7 +1053,6 @@ void FrameGraph::execute(DriverApi& driver) noexcept {
     mPassNodes.clear();
     mResourceNodes.clear();
     mResourceRegistry.clear();
-    mAliases.clear();
     mRenderTargetCache.clear();
     mId = 0;
 }
@@ -1114,16 +1115,6 @@ void FrameGraph::export_graphviz(utils::io::ostream& out) {
             }
         }
         out << "} [color=lightgreen]\n";
-    }
-
-    // aliases...
-    if (!mAliases.empty()) {
-        out << "\n";
-        for (fg::Alias const& alias : mAliases) {
-            out << "R" << registry[alias.from.index].resource->id << "_" << registry[alias.from.index].version << " -> ";
-            out << "R" << registry[alias.to.index].resource->id << "_" << registry[alias.to.index].version;
-            out << " [color=yellow, style=dashed]\n";
-        }
     }
 
     out << "}" << utils::io::endl;
