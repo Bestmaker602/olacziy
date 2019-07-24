@@ -107,6 +107,7 @@ set(TEST_SRCS
         test/test_Entity.cpp
         test/test_JobSystem.cpp
         test/test_StructureOfArrays.cpp
+        test/test_sort.cpp
         test/test_sstream.cpp
         test/test_utils_main.cpp
         test/test_Zip2Iterator.cpp
@@ -139,6 +140,7 @@ set(BENCHMARK_SRCS
         benchmark/benchmark_calls.cpp
         benchmark/benchmark_JobSystem.cpp
         benchmark/benchmark_mutex.cpp
+        benchmark/benchmark_sort.cpp
         benchmark/benchmark_memcpy.cpp)
 
 
