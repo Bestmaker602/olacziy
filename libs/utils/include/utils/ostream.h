@@ -22,6 +22,8 @@
 #include <utils/bitset.h>
 #include <utils/compiler.h> // ssize_t is a POSIX type.
 
+#include <magic_enum/magic_enum.h>
+
 namespace utils {
 namespace io {
 
@@ -122,6 +124,12 @@ inline ostream& operator<<(ostream& stream, const VECTOR<T>& v) {
     }
     stream << T(v[v.size() - 1]) << " >";
     return stream;
+}
+
+template<typename ENUM>
+inline std::enable_if_t<std::is_enum<ENUM>::value, io::ostream&>
+operator<<(io::ostream& stream, ENUM e) {
+    return stream << std::string(magic_enum::enum_name(e));
 }
 
 inline ostream& hex(ostream& s) noexcept { return s.hex(); }
