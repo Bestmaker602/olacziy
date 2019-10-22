@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-#include <magic_enum/magic_enum.h>
-
 // Empty symbol used to suppress warnings on Darwin
 #if __has_attribute(visibility) 
     __attribute__((visibility("hidden")))
