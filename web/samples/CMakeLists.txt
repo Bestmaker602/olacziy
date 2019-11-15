@@ -190,7 +190,8 @@ set(HTML_FILES
     parquet.html
     skinning.html
     suzanne.html
-    triangle.html)
+    triangle.html
+    viewer.html)
 
 set(DEMO_ASSETS)
 foreach (NAME ${HTML_FILES})
