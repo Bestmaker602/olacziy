@@ -197,6 +197,7 @@ private:
     bool mEnableSunlight = true;
     bool mEnableShadows = true;
     int mShadowCascades = 1;
+    int mShadowMapSizeExponent = 10;
     bool mEnableContactShadows = false;
     bool mEnableDithering = true;
     bool mEnableFxaa = true;
@@ -496,6 +497,9 @@ void SimpleViewer::updateUserInterface() {
         ImGui::SliderInt("Cascades", &mShadowCascades, 1, 4);
         ImGui::Checkbox("Debug Cascades", debug.getPropertyAddress<bool>("d.shadowmap.visualize_cascades"));
         ImGui::Checkbox("Enable contact shadows", &mEnableContactShadows);
+        char label[32];
+        sprintf(label, "%d", 1 << mShadowMapSizeExponent);
+        ImGui::SliderInt("Shadow map size", &mShadowMapSizeExponent, 5, 13, label);
     }
 
     if (ImGui::CollapsingHeader("Fog")) {
@@ -533,9 +537,16 @@ void SimpleViewer::updateUserInterface() {
         auto options = lm.getShadowOptions(ci);
         options.screenSpaceContactShadows = mEnableContactShadows;
         options.shadowCascades = mShadowCascades;
+        options.mapSize;
         lm.setShadowOptions(ci, options);
         lm.setShadowCaster(ci, mEnableShadows);
     });
+
+    // Adjust sun shadow settings.
+    auto sun = lm.getInstance(mSunlight);
+    LightManager::ShadowOptions options = lm.getShadowOptions(sun);
+    options.mapSize = 1 << mShadowMapSizeExponent;
+    lm.setShadowOptions(sun, options);
 
     if (mAsset != nullptr) {
         if (ImGui::CollapsingHeader("Model", headerFlags)) {
