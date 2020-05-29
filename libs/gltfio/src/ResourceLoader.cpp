@@ -30,6 +30,7 @@
 
 #include <utils/JobSystem.h>
 #include <utils/Log.h>
+#include <utils/Systrace.h>
 
 #include <cgltf.h>
 
@@ -51,6 +52,7 @@
 using namespace filament;
 using namespace filament::math;
 using namespace utils;
+using namespace gltfio::details;
 
 static const auto FREE_CALLBACK = [](void* mem, size_t, void*) { free(mem); };
 
@@ -99,11 +101,12 @@ struct ResourceLoader::Impl {
     int mNumDecoderTasks;
     int mNumDecoderTasksFinished;
     utils::JobSystem::Job* mDecoderRootJob = nullptr;
-    details::FFilamentAsset* mCurrentAsset;
+    FFilamentAsset* mCurrentAsset;
 
+    void computeTangents(FFilamentAsset* asset);
     bool createTextures(bool async);
-    void addTextureCacheEntry(const details::TextureSlot& tb);
-    void bindTextureToMaterial(const details::TextureSlot& tb);
+    void addTextureCacheEntry(const TextureSlot& tb);
+    void bindTextureToMaterial(const TextureSlot& tb);
     void decodeSingleTexture();
     void uploadPendingTextures();
     ~Impl();
@@ -432,7 +435,7 @@ bool ResourceLoader::loadResources(FFilamentAsset* asset, bool async) {
 
     // Compute surface orientation quaternions if necessary. This is similar to sparse data in that
     // we need to generate the contents of a GPU buffer by processing one or more CPU buffer(s).
-    computeTangents(asset);
+    pImpl->computeTangents(asset);
 
     // Non-textured renderables are now considered ready, so notify the dependency graph.
     asset->mDependencyGraph.finalize();
@@ -574,7 +577,7 @@ void ResourceLoader::Impl::addTextureCacheEntry(const TextureSlot& tb) {
 }
 
 void ResourceLoader::Impl::bindTextureToMaterial(const TextureSlot& tb) {
-    details::FFilamentAsset* asset = mCurrentAsset;
+    FFilamentAsset* asset = mCurrentAsset;
 
     const cgltf_texture* srcTexture = tb.texture;
     const cgltf_buffer_view* bv = srcTexture->image->buffer_view;
@@ -611,7 +614,7 @@ bool ResourceLoader::Impl::createTextures(bool async) {
     mUriTextureCache.clear();
 
     // First, determine texture dimensions and create texture cache entries.
-    details::FFilamentAsset* asset = mCurrentAsset;
+    FFilamentAsset* asset = mCurrentAsset;
     for (auto slot : asset->mTextureSlots) {
         addTextureCacheEntry(slot);
     }
@@ -714,42 +717,36 @@ bool ResourceLoader::Impl::createTextures(bool async) {
     return true;
 }
 
-ResourceLoader::Impl::~Impl() {
-    if (mDecoderRootJob) {
-        mEngine->getJobSystem().waitAndRelease(mDecoderRootJob);
-    }
-}
+void ResourceLoader::Impl::computeTangents(FFilamentAsset* asset) {
+    SYSTRACE_CALL();
 
-void ResourceLoader::applySparseData(FFilamentAsset* asset) const {
-    for (auto slot : asset->mBufferSlots) {
-        const cgltf_accessor* accessor = slot.accessor;
-        if (!accessor->is_sparse) {
-            continue;
-        }
-        cgltf_size numFloats = accessor->count * cgltf_num_components(accessor->type);
-        cgltf_size numBytes = sizeof(float) * numFloats;
-        float* generated = (float*) malloc(numBytes);
-        cgltf_accessor_unpack_floats(accessor, generated, numFloats);
-        VertexBuffer::BufferDescriptor bd(generated, numBytes, FREE_CALLBACK);
-        slot.vertexBuffer->setBufferAt(*pImpl->mEngine, slot.bufferIndex, std::move(bd));
-    }
-}
-
-void ResourceLoader::computeTangents(FFilamentAsset* asset) const {
     const cgltf_accessor* kGenerateTangents = &asset->mGenerateTangents;
     const cgltf_accessor* kGenerateNormals = &asset->mGenerateNormals;
 
-    // Declare vectors of normals and tangents, which we'll extract & convert from the source.
-    std::vector<float3> fp32Normals;
-    std::vector<float4> fp32Tangents;
-    std::vector<float3> fp32Positions;
-    std::vector<float2> fp32TexCoords;
-    std::vector<uint3> ui32Triangles;
+    struct JobParams {
+        // Consumed by the job:
+        const cgltf_primitive* prim;
+        VertexBuffer* const vb;
+        const uint8_t slot;
+        const int morphTargetIndex;
+        // Produced by the job:
+        cgltf_size vertexCount;
+        short4* results;
+    };
 
     constexpr int kMorphTargetUnused = -1;
 
-    auto computeQuats = [&](const cgltf_primitive& prim, VertexBuffer* vb, uint8_t slot,
-            int morphTargetIndex) {
+    auto computeQuats = [&](JobParams* params) {
+        const cgltf_primitive& prim = *params->prim;
+        const uint8_t slot = params->slot;
+        const int morphTargetIndex = params->morphTargetIndex;
+
+        // Declare vectors of normals and tangents, which we'll extract & convert from the source.
+        std::vector<float3> fp32Normals;
+        std::vector<float4> fp32Tangents;
+        std::vector<float3> fp32Positions;
+        std::vector<float2> fp32TexCoords;
+        std::vector<uint3> ui32Triangles;
 
         cgltf_size vertexCount = 0;
 
@@ -776,14 +773,13 @@ void ResourceLoader::computeTangents(FFilamentAsset* asset) const {
                 }
             }
         }
+        params->vertexCount = vertexCount;
 
         // At a minimum we need normals to generate tangents.
         auto normalsInfo = accessors[cgltf_attribute_type_normal];
         if (vertexCount == 0) {
             return;
         }
-
-        short4* quats = (short4*) malloc(sizeof(short4) * vertexCount);
 
         geometry::SurfaceOrientation::Builder sob;
         sob.vertexCount(vertexCount);
@@ -855,13 +851,10 @@ void ResourceLoader::computeTangents(FFilamentAsset* asset) const {
         }
 
         // Compute surface orientation quaternions.
+        params->results = (short4*) malloc(sizeof(short4) * vertexCount);
         geometry::SurfaceOrientation* helper = sob.build();
-        helper->getQuats(quats, vertexCount);
+        helper->getQuats(params->results, vertexCount);
         delete helper;
-
-        // Upload quaternions to the GPU.
-        VertexBuffer::BufferDescriptor bd(quats, vertexCount * sizeof(short4), FREE_CALLBACK);
-        vb->setBufferAt(*pImpl->mEngine, slot, std::move(bd));
     };
 
     // Collect all TANGENT vertex attribute slots that need to be populated.
@@ -878,25 +871,74 @@ void ResourceLoader::computeTangents(FFilamentAsset* asset) const {
         baseTangents[slot.vertexBuffer] = slot.bufferIndex;
     }
 
-    // Go through all cgltf primitives and populate their tangents if requested.
+    // Create a job description for each primitive.
+    std::vector<JobParams> jobParams;
     for (auto pair : asset->mPrimitives) {
-        const cgltf_primitive& prim = *pair.first;
         VertexBuffer* vb = pair.second;
         auto iter = baseTangents.find(vb);
         if (iter != baseTangents.end()) {
-            computeQuats(prim, vb, iter->second, kMorphTargetUnused);
+            jobParams.emplace_back(JobParams { pair.first, vb, iter->second, kMorphTargetUnused });
         }
         for (int morphTarget = 0; morphTarget < 4; morphTarget++) {
             const auto& tangents = morphTangents[morphTarget];
             auto iter = tangents.find(vb);
             if (iter != tangents.end()) {
-                computeQuats(prim, vb, iter->second, morphTarget);
+                jobParams.emplace_back(JobParams { pair.first, vb, iter->second, morphTarget });
             }
         }
     }
+
+    // Kick off the jobs.
+    JobParams* paramsPtr = jobParams.data();
+    for (auto pair : asset->mPrimitives) {
+        VertexBuffer* vb = pair.second;
+        auto iter = baseTangents.find(vb);
+        if (iter != baseTangents.end()) {
+            computeQuats(paramsPtr++);
+        }
+        for (int morphTarget = 0; morphTarget < 4; morphTarget++) {
+            const auto& tangents = morphTangents[morphTarget];
+            auto iter = tangents.find(vb);
+            if (iter != tangents.end()) {
+                computeQuats(paramsPtr++);
+            }
+        }
+    }
+
+    // utils::JobSystem* js = &mEngine->getJobSystem();
+    // utils::JobSystem::Job* parent = js->createJob();
+    // js->runAndWait(parent);
+
+    // Finally, upload quaternions to the GPU.
+    for (JobParams& params : jobParams) {
+        VertexBuffer::BufferDescriptor bd(params.results, params.vertexCount * sizeof(short4),
+                FREE_CALLBACK);
+        params.vb->setBufferAt(*mEngine, params.slot, std::move(bd));
+    }
 }
 
-void ResourceLoader::normalizeSkinningWeights(details::FFilamentAsset* asset) const {
+ResourceLoader::Impl::~Impl() {
+    if (mDecoderRootJob) {
+        mEngine->getJobSystem().waitAndRelease(mDecoderRootJob);
+    }
+}
+
+void ResourceLoader::applySparseData(FFilamentAsset* asset) const {
+    for (auto slot : asset->mBufferSlots) {
+        const cgltf_accessor* accessor = slot.accessor;
+        if (!accessor->is_sparse) {
+            continue;
+        }
+        cgltf_size numFloats = accessor->count * cgltf_num_components(accessor->type);
+        cgltf_size numBytes = sizeof(float) * numFloats;
+        float* generated = (float*) malloc(numBytes);
+        cgltf_accessor_unpack_floats(accessor, generated, numFloats);
+        VertexBuffer::BufferDescriptor bd(generated, numBytes, FREE_CALLBACK);
+        slot.vertexBuffer->setBufferAt(*pImpl->mEngine, slot.bufferIndex, std::move(bd));
+    }
+}
+
+void ResourceLoader::normalizeSkinningWeights(FFilamentAsset* asset) const {
     auto normalize = [](cgltf_accessor* data) {
         if (data->type != cgltf_type_vec4 || data->component_type != cgltf_component_type_r_32f) {
             slog.w << "Cannot normalize weights, unsupported attribute type." << io::endl;
@@ -928,7 +970,7 @@ void ResourceLoader::normalizeSkinningWeights(details::FFilamentAsset* asset) co
     }
 }
 
-void ResourceLoader::updateBoundingBoxes(details::FFilamentAsset* asset) const {
+void ResourceLoader::updateBoundingBoxes(FFilamentAsset* asset) const {
     auto& rm = pImpl->mEngine->getRenderableManager();
     auto& tm = pImpl->mEngine->getTransformManager();
 
