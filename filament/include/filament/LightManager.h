@@ -205,6 +205,8 @@ public:
          */
         uint8_t shadowCascades = 1;
 
+        float splitSchemeLambda = 0.5f;
+
         /** Constant bias in world units (e.g. meters) by which shadows are moved away from the
          * light. 1mm by default.
          */

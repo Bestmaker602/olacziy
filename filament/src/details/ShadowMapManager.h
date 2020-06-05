@@ -132,12 +132,14 @@ private:
             math::mat4f proj = {};
             float near = 0.0f;
             float far = 0.0f;
+            float lambda = 0.5f;
             size_t cascadeCount = 1;
 
             bool operator!=(const Params& rhs) const {
                 return proj != rhs.proj ||
                        near != rhs.near ||
                        far != rhs.far ||
+                       lambda != rhs.lambda ||
                        cascadeCount != rhs.cascadeCount;
             }
         };

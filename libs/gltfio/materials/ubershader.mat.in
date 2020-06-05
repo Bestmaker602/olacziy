@@ -7,6 +7,7 @@ material {
     doubleSided : ${DOUBLESIDED},
     flipUV : false,
     specularAmbientOcclusion: simple,
+    specularAntiAliasing : true,
     parameters : [
 
         { type : float3, name : specularFactor },

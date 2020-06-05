@@ -198,6 +198,7 @@ private:
     bool mEnableShadows = true;
     int mShadowCascades = 1;
     int mShadowMapSizeExponent = 10;
+    float mSplitLambda = 0.5f;
     bool mEnableContactShadows = false;
     bool mEnableDithering = true;
     bool mEnableFxaa = true;
@@ -500,6 +501,15 @@ void SimpleViewer::updateUserInterface() {
         char label[32];
         sprintf(label, "%d", 1 << mShadowMapSizeExponent);
         ImGui::SliderInt("Shadow map size", &mShadowMapSizeExponent, 5, 13, label);
+        ImGui::SliderFloat("Split lambda", &mSplitLambda, 0.0f, 1.0f);
+        if (ImGui::Button("CSM")) {
+            mShadowMapSizeExponent = 10;
+            mShadowCascades = 4;
+        }
+        if (ImGui::Button("Single SM")) {
+            mShadowMapSizeExponent = 11;
+            mShadowCascades = 1;
+        }
     }
 
     if (ImGui::CollapsingHeader("Fog")) {
@@ -546,6 +556,7 @@ void SimpleViewer::updateUserInterface() {
     auto sun = lm.getInstance(mSunlight);
     LightManager::ShadowOptions options = lm.getShadowOptions(sun);
     options.mapSize = 1 << mShadowMapSizeExponent;
+    options.splitSchemeLambda = mSplitLambda;
     lm.setShadowOptions(sun, options);
 
     if (mAsset != nullptr) {

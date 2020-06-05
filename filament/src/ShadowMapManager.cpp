@@ -203,6 +203,10 @@ bool ShadowMapManager::updateCascadeShadowMaps(FEngine& engine, FView& view,
     const uint16_t textureSize = mTextureState.size;
     auto& lcm = engine.getLightManager();
 
+    float practicalSplitLambda = 0.5f;
+
+    // TODO: I don't think we can't neccesarily assume light 0 down below.
+
     if (mCascadeShadowMaps.size() > 0) {
         // Even if we have more than one cascade, we cull directional shadow casters against the
         // entire camera frustum, as if we only had a single cascade.
@@ -225,7 +229,13 @@ bool ShadowMapManager::updateCascadeShadowMaps(FEngine& engine, FView& view,
         const float normalBias = lcm.getShadowNormalBias(0);
         perViewUb.setUniform(offsetof(PerViewUib, shadowBias),
                 float3{0, normalBias * texelSizeWorldSpace, 0});
+
+        FLightManager::Instance directionalLight = lightData.elementAt<FScene::LIGHT_INSTANCE>(0);
+        auto shadowOptions = lcm.getShadowOptions(directionalLight);
+        practicalSplitLambda = shadowOptions.splitSchemeLambda;
     }
+
+    utils::slog.d << practicalSplitLambda << utils::io::endl;
 
     // We divide the camera frustum into N cascades. This gives us N + 1 split positions.
     // The first split position is the near plane; the last split position is the far plane.
@@ -233,6 +243,7 @@ bool ShadowMapManager::updateCascadeShadowMaps(FEngine& engine, FView& view,
         .proj = viewingCameraInfo.cullingProjection,
         .near = -viewingCameraInfo.zn,
         .far = -viewingCameraInfo.zf,
+        .lambda = practicalSplitLambda,
         .cascadeCount = mCascadeShadowMaps.size()
     };
     if (p != mCascadeSplitParams) {
@@ -424,9 +435,18 @@ ShadowMapManager::CascadeSplits::CascadeSplits(Params p) : mSplitCount(p.cascade
             return near + (far - near) * ((float) split / cascades);
         };
     };
+    auto logSplit = [](float near, float far, size_t cascades) {
+        return [near, far, cascades](size_t split) {
+            if (cascades == 0) {
+                return 0.0f;
+            }
+            return near * std::powf(far / near, split / cascades);
+        };
+    };
     auto uniformSplitCalculator = uniformSplit(p.near, p.far, p.cascadeCount);
+    auto logSplitCalculator = logSplit(p.near, p.far, p.cascadeCount);
     for (size_t s = 0; s < mSplitCount; s++) {
-        mSplitsWs[s] = uniformSplitCalculator(s);
+        mSplitsWs[s] = p.lambda * logSplitCalculator(s) + (1.0f - p.lambda) * uniformSplitCalculator(s);
         mSplitsCs[s] = mat4f::project(p.proj, float3(0.0f, 0.0f, mSplitsWs[s])).z;
     }
 }
