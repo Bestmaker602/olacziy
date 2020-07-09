@@ -73,6 +73,7 @@
 
     ARWorldTrackingConfiguration* configuration = [ARWorldTrackingConfiguration new];
     configuration.planeDetection = ARPlaneDetectionHorizontal;
+    configuration.environmentTexturing = AREnvironmentTexturingAutomatic;
     [self.session runWithConfiguration:configuration];
 }
 
@@ -164,6 +165,19 @@
                 .vertexCount = geometry.vertexCount,
                 .indexCount = geometry.triangleCount * 3
             });
+            continue;
+        }
+
+        if ([anchor isKindOfClass:[AREnvironmentProbeAnchor class]]) {
+            AREnvironmentProbeAnchor* probeAnchor = (AREnvironmentProbeAnchor*) anchor;
+            id<MTLTexture> environment = probeAnchor.environmentTexture;
+            if (!environment) {
+                continue;
+            }
+            // CFBridingRetain is used here to cast the id<MTLTexture> into a void*.
+            filament::math::mat4f mat = FILAMENT_MAT4F_FROM_SIMD(probeAnchor.transform);
+            app->updateEnvironmentTexture((void*) CFBridgingRetain(probeAnchor.environmentTexture),
+                    environment.width, environment.mipmapLevelCount, mat.upperLeft());
             continue;
         }
 

@@ -30,13 +30,15 @@
 
 #include <sstream>
 
+#include <iostream>
+
 // This file is generated via the "Run Script" build phase and contains the mesh, materials, and IBL
 // textures this app uses.
 #include "resources.h"
 
 using namespace filamesh;
 
-static constexpr float OBJECT_SCALE = 0.02f;
+static constexpr float OBJECT_SCALE = 0.1f;
 
 FilamentApp::FilamentApp(void* nativeLayer, uint32_t width, uint32_t height)
         : nativeLayer(nativeLayer), width(width), height(height) {
@@ -169,13 +171,38 @@ void FilamentApp::updatePlaneGeometry(const FilamentArPlaneGeometry& geometry) {
     scene->addEntity(app.planeGeometry);
 }
 
+void FilamentApp::updateEnvironmentTexture(void* texture, size_t faceSize,
+        size_t levels, const mat3f& rotation) {
+    if (app.probeTexture) {
+        engine->destroy(app.probeTexture);
+    }
+
+    app.probeTexture = Texture::Builder()
+        .width((uint32_t) faceSize)
+        .height((uint32_t) faceSize)
+        .levels(levels)
+        .format(Texture::InternalFormat::RGBA16F)
+        .sampler(Texture::Sampler::SAMPLER_CUBEMAP)
+        .import((intptr_t) texture)
+        .build(*engine);
+
+    if (app.indirectLight) {
+        engine->destroy(app.indirectLight);
+    }
+    app.indirectLight = IndirectLight::Builder()
+        .reflections(app.probeTexture)
+        .rotation(rotation)
+        .intensity(30000)
+        .build(*engine);
+    scene->setIndirectLight(app.indirectLight);
+}
+
 FilamentApp::~FilamentApp() {
     delete app.cameraFeedTriangle;
 
     engine->destroy(app.materialInstance);
     engine->destroy(app.mat);
     engine->destroy(app.indirectLight);
-    engine->destroy(app.iblTexture);
     engine->destroy(app.renderable);
     engine->destroy(app.sun);
     engine->destroy(app.shadowPlane);
@@ -202,19 +229,6 @@ void FilamentApp::setupFilament() {
 }
 
 void FilamentApp::setupIbl() {
-    image::KtxBundle* iblBundle = new image::KtxBundle(RESOURCES_VENETIAN_CROSSROADS_2K_IBL_DATA,
-                                                       RESOURCES_VENETIAN_CROSSROADS_2K_IBL_SIZE);
-    float3 harmonics[9];
-    iblBundle->getSphericalHarmonics(harmonics);
-    app.iblTexture = image::ktx::createTexture(engine, iblBundle, false);
-
-    app.indirectLight = IndirectLight::Builder()
-        .reflections(app.iblTexture)
-        .irradiance(3, harmonics)
-        .intensity(30000)
-        .build(*engine);
-    scene->setIndirectLight(app.indirectLight);
-
     app.sun = EntityManager::get().create();
     LightManager::Builder(LightManager::Type::SUN)
         .castShadows(true)

@@ -23,6 +23,7 @@
 #include <filament/Renderer.h>
 #include <filament/Scene.h>
 #include <filament/Skybox.h>
+#include <filament/Texture.h>
 #include <filament/TransformManager.h>
 #include <filament/View.h>
 
@@ -62,6 +63,8 @@ public:
     };
 
     void updatePlaneGeometry(const FilamentArPlaneGeometry& geometry);
+    void updateEnvironmentTexture(void* texture, size_t faceSize, size_t levels,
+            const mat3f& rotation);
 
 private:
 
@@ -90,7 +93,7 @@ private:
         Material* mat;
         MaterialInstance* materialInstance;
         IndirectLight* indirectLight = nullptr;
-        Texture* iblTexture = nullptr;
+        Texture* probeTexture = nullptr;
         Entity renderable;
         Entity sun;
         FullScreenTriangle* cameraFeedTriangle = nullptr;
