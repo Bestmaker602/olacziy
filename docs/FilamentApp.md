@@ -81,26 +81,18 @@ same image that is being rendered on the remote device. I do not see much use fo
 add a layer of complexity that I do not think is justified. Note that if we not have a mirror mode,
 we should at least ensure that the remote touch interface supports zoom, pan, and spin.
 
-# Tentative design choices
+# Tentative design details
 
-- The client application runs on the desktop and is written in C++.
+- We will introduce libs/gltfserver (which in turns uses civetweb), as well as two apps that link
+  against it: one for Android and one for Desktop. iOS and WebGL support can come later.
+- libs/filamentapp is rewritten (does not depend on libs/gltfserver).
+- samples/gltf_viewer is vastly simplified, and becomes an example app with no UI.
+- tools/gltf_client is introduced, with two mockups below.
 
-  The client will use ImGui for the UI. Initially it will use Filament for the ImGui backend, but
-  the code will be layered to make this easy to swap with one of the stock backends from the
-  ImGUI repo. We would need to do this if we completely remove desktop support from Filament.
+The left mockup shows its initial state, the right mockup shows what it looks like after the
+user asks to connect to localhost.
 
-- The server app will have Android and Desktop variants; iOS and WebGL support can come later.
-
-  On both platforms, the server will use civetweb and will show an empty screen or window
-  until the user to starts up the client and loads a model.
-
-- Client app mockup
-
-  TODO
-
-# What about existing samples?
-
-TODO
+[IMAGE](IMAGE)
 
 # Settings JSON
 

@@ -260,6 +260,9 @@ Material* createMaterial(Engine* engine, const MaterialKey& config, const UvMap&
         const char* name) {
     std::string shader = shaderFromKey(config);
     processShaderString(&shader, uvmap, config);
+    if (engine->getBackend() == filament::backend::Backend::DEFAULT) {
+        puts("oh no");
+    }
     MaterialBuilder builder = MaterialBuilder()
             .name(name)
             .flipUV(false)

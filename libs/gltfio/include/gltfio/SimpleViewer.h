@@ -52,7 +52,7 @@ namespace gltfio {
 class SimpleViewer {
 public:
 
-    static constexpr int DEFAULT_SIDEBAR_WIDTH = 350;
+    static constexpr int DEFAULT_SIDEBAR_WIDTH = 1000;
 
     /**
      * Constructs a SimpleViewer that has a fixed association with the given Filament objects.
@@ -61,7 +61,7 @@ public:
      * light sources) that it owns.
      */
     SimpleViewer(filament::Engine* engine, filament::Scene* scene, filament::View* view,
-            int sidebarWidth = DEFAULT_SIDEBAR_WIDTH);
+            int sidebarWidth);
 
     /**
      * Destroys the SimpleViewer and any Filament entities that it owns.
@@ -443,61 +443,65 @@ void SimpleViewer::updateUserInterface() {
     };
 
     // Disable rounding and draw a fixed-height ImGui window that looks like a sidebar.
-    ImGui::GetStyle().WindowRounding = 0;
-    ImGui::SetNextWindowPos(ImVec2(0, 0));
+    //ImGui::GetStyle().WindowRounding = 0;
+    //ImGui::SetNextWindowPos(ImVec2(0, 0));
 
     const float width = ImGui::GetIO().DisplaySize.x;
     const float height = ImGui::GetIO().DisplaySize.y;
-    ImGui::SetNextWindowSize(ImVec2(mSidebarWidth, height), ImGuiCond_Once);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(20, height), ImVec2(width, height));
+    // ImGui::SetNextWindowSize(ImVec2(mSidebarWidth, height), ImGuiCond_Once);
+    // ImGui::SetNextWindowSizeConstraints(ImVec2(20, height), ImVec2(width, height));
 
-    ImGui::Begin("Filament", nullptr, ImGuiWindowFlags_NoTitleBar);
-    if (mCustomUI) {
-        mCustomUI();
+    if (ImGui::BeginMainMenuBar()) {
+        if (ImGui::BeginMenu("File")) {
+            if (ImGui::MenuItem("Export...", "CTRL+S")) {
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Close")) {
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Windows")) {
+        }
+        const char* text = "Connected to localhost:8081";
+        ImGui::SetCursorPosX(width - ImGui::CalcTextSize(text).x - 5);
+        ImGui::TextColored(ImVec4(0,1,0,1), "%s", text);
+        ImGui::EndMainMenuBar();
     }
 
     DebugRegistry& debug = mEngine->getDebugRegistry();
 
-    if (ImGui::CollapsingHeader("View")) {
-        ImGui::Indent();
-        ImGui::Checkbox("Dithering", &mEnableDithering);
-        ImGui::Checkbox("FXAA", &mEnableFxaa);
-        ImGui::Checkbox("MSAA 4x", &mEnableMsaa);
-        ImGui::Checkbox("SSAO", &mEnableSsao);
-        ImGui::Checkbox("Bloom", &mBloomOptions.enabled);
-        ImGui::Unindent();
-    }
+    ImGui::Begin("Help");
+    ImGui::TextWrapped(
+        "To view a model on the remote device, drop a set of files (one of which must be gltf or glb), or a folder.\n\n"
+        "To load an environment, use File > Open or drop a KTX file into this window."
+        "You can also drop an HDR file to invoke cmgen.\n\n"
+        "For convenience, try Filament for desktop using the button below.\n\n");
+    ImGui::GetStyle().FrameRounding = 20;
+    ImGui::Button("Launch gltf_server on localhost");
+    ImGui::End();
 
-    if (ImGui::CollapsingHeader("Light")) {
-        ImGui::Indent();
-        ImGui::SliderFloat("IBL intensity", &mIblIntensity, 0.0f, 100000.0f);
-        ImGui::SliderAngle("IBL rotation", &mIblRotation);
-        ImGui::SliderFloat("Sun intensity", &mSunlightIntensity, 50000.0, 150000.0f);
-        ImGuiExt::DirectionWidget("Sun direction", mSunlightDirection.v);
-        ImGui::Checkbox("Enable sunlight", &mEnableSunlight);
-        ImGui::Checkbox("Enable shadows", &mEnableShadows);
-        ImGui::SliderInt("Cascades", &mShadowCascades, 1, 4);
-        ImGui::Checkbox("Debug Cascades", debug.getPropertyAddress<bool>("d.shadowmap.visualize_cascades"));
-        ImGui::Checkbox("Enable contact shadows", &mEnableContactShadows);
-        ImGui::SliderFloat("Split pos 0", &mSplitPositions[0], 0.0f, 1.0f);
-        ImGui::SliderFloat("Split pos 1", &mSplitPositions[1], 0.0f, 1.0f);
-        ImGui::SliderFloat("Split pos 2", &mSplitPositions[2], 0.0f, 1.0f);
-        ImGui::Unindent();
-    }
+    ImGui::Begin("View");
+    ImGui::Checkbox("Dithering", &mEnableDithering);
+    ImGui::Checkbox("FXAA", &mEnableFxaa);
+    ImGui::Checkbox("MSAA 4x", &mEnableMsaa);
+    ImGui::Checkbox("SSAO", &mEnableSsao);
+    ImGui::Checkbox("Bloom", &mBloomOptions.enabled);
+    ImGui::End();
 
-    if (ImGui::CollapsingHeader("Fog")) {
-        ImGui::Indent();
-        ImGui::Checkbox("Enable Fog", &mFogOptions.enabled);
-        ImGui::SliderFloat("Start", &mFogOptions.distance, 0.0f, 100.0f);
-        ImGui::SliderFloat("Density", &mFogOptions.density, 0.0f, 1.0f);
-        ImGui::SliderFloat("Height", &mFogOptions.height, 0.0f, 100.0f);
-        ImGui::SliderFloat("Height Falloff", &mFogOptions.heightFalloff, 0.0f, 10.0f);
-        ImGui::SliderFloat("Scattering Start", &mFogOptions.inScatteringStart, 0.0f, 100.0f);
-        ImGui::SliderFloat("Scattering Size", &mFogOptions.inScatteringSize, 0.0f, 100.0f);
-        ImGui::Checkbox("Color from IBL", &mFogOptions.fogColorFromIbl);
-        ImGui::ColorPicker3("Color", mFogOptions.color.v);
-        ImGui::Unindent();
-    }
+    ImGui::Begin("Light Sources");
+    ImGui::SliderFloat("IBL intensity", &mIblIntensity, 0.0f, 100000.0f);
+    ImGui::SliderAngle("IBL rotation", &mIblRotation);
+    ImGui::SliderFloat("Sun intensity", &mSunlightIntensity, 50000.0, 150000.0f);
+    ImGuiExt::DirectionWidget("Sun direction", mSunlightDirection.v);
+    ImGui::Checkbox("Enable sunlight", &mEnableSunlight);
+    ImGui::Checkbox("Enable shadows", &mEnableShadows);
+    ImGui::SliderInt("Cascades", &mShadowCascades, 1, 4);
+    ImGui::Checkbox("Debug Cascades", debug.getPropertyAddress<bool>("d.shadowmap.visualize_cascades"));
+    ImGui::Checkbox("Enable contact shadows", &mEnableContactShadows);
+    ImGui::SliderFloat("Split pos 0", &mSplitPositions[0], 0.0f, 1.0f);
+    ImGui::SliderFloat("Split pos 1", &mSplitPositions[1], 0.0f, 1.0f);
+    ImGui::SliderFloat("Split pos 2", &mSplitPositions[2], 0.0f, 1.0f);
+    ImGui::End();
 
     mView->setDithering(mEnableDithering ? View::Dithering::TEMPORAL : View::Dithering::NONE);
     mView->setAntiAliasing(mEnableFxaa ? View::AntiAliasing::FXAA : View::AntiAliasing::NONE);
@@ -528,40 +532,13 @@ void SimpleViewer::updateUserInterface() {
     });
 
     if (mAsset != nullptr) {
-        if (ImGui::CollapsingHeader("Hierarchy")) {
-            ImGui::Indent();
-            ImGui::Checkbox("Show bounds", &mEnableWireframe);
-            treeNode(mAsset->getRoot());
-            ImGui::Unindent();
-        }
-
-        if (mAnimator->getAnimationCount() > 0 && ImGui::CollapsingHeader("Animation")) {
-            ImGui::Indent();
-            int selectedAnimation = mCurrentAnimation;
-            ImGui::RadioButton("Disable", &selectedAnimation, 0);
-            for (size_t i = 0, count = mAnimator->getAnimationCount(); i < count; ++i) {
-                std::string label = mAnimator->getAnimationName(i);
-                if (label.empty()) {
-                    label = "Unnamed " + std::to_string(i);
-                }
-                ImGui::RadioButton(label.c_str(), &selectedAnimation, i + 1);
-            }
-            if (selectedAnimation != mCurrentAnimation) {
-                mCurrentAnimation = selectedAnimation;
-                mResetAnimation = true;
-            }
-            ImGui::Unindent();
-        }
-
-        if (mEnableWireframe) {
-            mScene->addEntity(mAsset->getWireframe());
-        } else {
-            mScene->remove(mAsset->getWireframe());
-        }
+        ImGui::Begin("Model Hierarchy");
+        ImGui::Checkbox("Show bounds", &mEnableWireframe);
+        treeNode(mAsset->getRoot());
+        ImGui::End();
     }
 
     mSidebarWidth = ImGui::GetWindowWidth();
-    ImGui::End();
 
     updateIndirectLight();
 }

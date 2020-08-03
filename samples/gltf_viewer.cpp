@@ -81,8 +81,8 @@ struct App {
         float cameraISO = 100.0f;
         float groundShadowStrength = 0.75f;
         bool groundPlaneEnabled = false;
-        bool skyboxEnabled = true;
-        sRGBColor backgroundColor = { 0.0f };
+        bool skyboxEnabled = false;
+        sRGBColor backgroundColor = { 0.2, 0.4, 0.6};
     } viewOptions;
 
     View::DepthOfFieldOptions dofOptions;
@@ -431,10 +431,9 @@ static void colorGradingUI(App& app) {
     const static ImVec2 plotLinesSize(260.0f, 160.0f);
     const static ImVec2 plotLinesWideSize(350.0f, 120.0f);
 
-    if (ImGui::CollapsingHeader("Color grading")) {
+    ImGui::Begin("Color grading");
         App::ColorGradingOptions& colorGrading = app.colorGradingOptions;
 
-        ImGui::Indent();
         ImGui::Checkbox("Enabled##colorGrading", &colorGrading.enabled);
         ImGui::Combo("Quality##colorGradingQuality", &colorGrading.quality,
                 "Low\0Medium\0High\0Ultra\0\0");
@@ -576,8 +575,7 @@ static void colorGradingUI(App& app) {
                 ImGui::PopStyleColor();
             }
         }
-        ImGui::Unindent();
-    }
+    ImGui::End();
 }
 
 static LinearColor inverseTonemapSRGB(sRGBColor x) {
@@ -587,7 +585,7 @@ static LinearColor inverseTonemapSRGB(sRGBColor x) {
 int main(int argc, char** argv) {
     App app;
 
-    app.config.title = "Filament";
+    app.config.title = "Filament Controller";
     app.config.iblDirectory = FilamentApp::getRootAssetsPath() + DEFAULT_IBL;
 
     int optionIndex = handleCommandLineArguments(argc, argv, &app);
@@ -671,7 +669,7 @@ int main(int argc, char** argv) {
     auto setup = [&](Engine* engine, View* view, Scene* scene) {
         app.engine = engine;
         app.names = new NameComponentManager(EntityManager::get());
-        app.viewer = new SimpleViewer(engine, scene, view, 410);
+        app.viewer = new SimpleViewer(engine, scene, view, 5000);
         app.materials = (app.materialSource == GENERATE_SHADERS) ?
                 createMaterialGenerator(engine) : createUbershaderLoader(engine);
         app.loader = AssetLoader::create({engine, app.materials, app.names });
