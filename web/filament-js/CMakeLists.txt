@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(filament-js)
 
-set(EXTERN_POSTJS_SRC
+set(POSTJS_SRC
   ${CMAKE_CURRENT_SOURCE_DIR}/wasmloader.js
   ${CMAKE_CURRENT_SOURCE_DIR}/extensions.js
   ${CMAKE_CURRENT_SOURCE_DIR}/utilities.js)
@@ -22,14 +22,15 @@ set(COPTS "${COPTS} -DEMSCRIPTEN_HAS_UNBOUND_TYPE_NAMES=0")
 
 set(LOPTS "${LOPTS} --bind")
 set(LOPTS "${LOPTS} -s ALLOW_MEMORY_GROWTH=1")
+set(LOPTS "${LOPTS} -s EXPORT_ES6=1")
 set(LOPTS "${LOPTS} -s MODULARIZE=1")
-set(LOPTS "${LOPTS} -s EXPORT_NAME=Filament")
+set(LOPTS "${LOPTS} -s EXPORT_NAME=LoadFilament")
 set(LOPTS "${LOPTS} -s FULL_ES3")
 set(LOPTS "${LOPTS} -s MIN_WEBGL_VERSION=2")
 set(LOPTS "${LOPTS} -s MAX_WEBGL_VERSION=2")
 
-foreach (JS_FILENAME ${EXTERN_POSTJS_SRC})
-  set(LOPTS "${LOPTS} --extern-post-js ${JS_FILENAME}")
+foreach (JS_FILENAME ${POSTJS_SRC})
+  set(LOPTS "${LOPTS} --post-js ${JS_FILENAME}")
 endforeach()
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${LOPTS}")

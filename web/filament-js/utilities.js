@@ -18,7 +18,7 @@
 // Buffer Wrappers
 // ---------------
 
-// These wrappers make it easy for JavaScript clients to pass large swaths of data to Filament. They
+// These wrappers make it easy for JavaScript clients to pass large swaths of data to Module. They
 // copy the contents of the given typed array into the WASM heap, then return a low-level buffer
 // descriptor object. If the given array was taken from the WASM heap, then they create a temporary
 // copy because the input pointer becomes invalidated after allocating heap memory for the buffer
@@ -27,14 +27,14 @@
 /// Buffer ::function:: Constructs a [BufferDescriptor] by copying a typed array into the WASM heap.
 /// typedarray ::argument:: Data to consume (e.g. Uint8Array, Uint16Array, Float32Array)
 /// ::retval:: [BufferDescriptor]
-Filament.Buffer = function(typedarray) {
+Module.Buffer = function(typedarray) {
     console.assert(typedarray.buffer instanceof ArrayBuffer);
     console.assert(typedarray.byteLength > 0);
-    if (Filament.HEAPU32.buffer == typedarray.buffer) {
+    if (Module.HEAPU32.buffer == typedarray.buffer) {
         typedarray = new Uint8Array(typedarray);
     }
     const ta = typedarray;
-    const bd = new Filament.driver$BufferDescriptor(ta.byteLength);
+    const bd = new Module.driver$BufferDescriptor(ta.byteLength);
     const uint8array = new Uint8Array(ta.buffer, ta.byteOffset, ta.byteLength);
     bd.getBytes().set(uint8array);
     return bd;
@@ -46,14 +46,14 @@ Filament.Buffer = function(typedarray) {
 /// format ::argument:: [PixelDataFormat]
 /// datatype ::argument:: [PixelDataType]
 /// ::retval:: [PixelBufferDescriptor]
-Filament.PixelBuffer = function(typedarray, format, datatype) {
+Module.PixelBuffer = function(typedarray, format, datatype) {
     console.assert(typedarray.buffer instanceof ArrayBuffer);
     console.assert(typedarray.byteLength > 0);
-    if (Filament.HEAPU32.buffer == typedarray.buffer) {
+    if (Module.HEAPU32.buffer == typedarray.buffer) {
         typedarray = new Uint8Array(typedarray);
     }
     const ta = typedarray;
-    const bd = new Filament.driver$PixelBufferDescriptor(ta.byteLength, format, datatype);
+    const bd = new Module.driver$PixelBufferDescriptor(ta.byteLength, format, datatype);
     const uint8array = new Uint8Array(ta.buffer, ta.byteOffset, ta.byteLength);
     bd.getBytes().set(uint8array);
     return bd;
@@ -65,30 +65,30 @@ Filament.PixelBuffer = function(typedarray, format, datatype) {
 /// cdatatype ::argument:: [CompressedPixelDataType]
 /// faceSize ::argument:: Number of bytes in each face (cubemaps only)
 /// ::retval:: [PixelBufferDescriptor]
-Filament.CompressedPixelBuffer = function(typedarray, cdatatype, faceSize) {
+Module.CompressedPixelBuffer = function(typedarray, cdatatype, faceSize) {
     console.assert(typedarray.buffer instanceof ArrayBuffer);
     console.assert(typedarray.byteLength > 0);
     faceSize = faceSize || typedarray.byteLength;
-    if (Filament.HEAPU32.buffer == typedarray.buffer) {
+    if (Module.HEAPU32.buffer == typedarray.buffer) {
         typedarray = new Uint8Array(typedarray);
     }
     const ta = typedarray;
-    const bd = new Filament.driver$PixelBufferDescriptor(ta.byteLength, cdatatype, faceSize, true);
+    const bd = new Module.driver$PixelBufferDescriptor(ta.byteLength, cdatatype, faceSize, true);
     const uint8array = new Uint8Array(ta.buffer, ta.byteOffset, ta.byteLength);
     bd.getBytes().set(uint8array);
     return bd;
 };
 
-Filament._loadFilamesh = function(engine, buffer, definstance, matinstances) {
+Module._loadFilamesh = function(engine, buffer, definstance, matinstances) {
     matinstances = matinstances || {};
-    const registry = new Filament.MeshReader$MaterialRegistry();
+    const registry = new Module.MeshReader$MaterialRegistry();
     for (let key in matinstances) {
         registry.set(key, matinstances[key]);
     }
     if (definstance) {
         registry.set("DefaultMaterial", definstance);
     }
-    const mesh = Filament.MeshReader.loadMeshFromBuffer(engine, buffer, registry);
+    const mesh = Module.MeshReader.loadMeshFromBuffer(engine, buffer, registry);
     const keys = registry.keys();
     for (let i = 0; i < keys.size(); i++) {
         const key = keys.get(i);
@@ -117,7 +117,7 @@ Filament._loadFilamesh = function(engine, buffer, definstance, matinstances) {
 /// as quaternions.
 /// - `icosphere.triangles` Uint16Array with triangle indices.
 ///
-Filament.IcoSphere = function(nsubdivs) {
+Module.IcoSphere = function(nsubdivs) {
     const X = .525731112119133606;
     const Z = .850650808352039932;
     const N = 0.;
@@ -144,7 +144,7 @@ Filament.IcoSphere = function(nsubdivs) {
     const normals = this.vertices;
 
     // Perform computations.
-    const sob = new Filament.SurfaceOrientation$Builder();
+    const sob = new Module.SurfaceOrientation$Builder();
     sob.vertexCount(nverts);
     sob.normals(normals, 0)
     const orientation = sob.build();
@@ -156,7 +156,7 @@ Filament.IcoSphere = function(nsubdivs) {
     orientation.delete();
 }
 
-Filament.IcoSphere.prototype.subdivide = function() {
+Module.IcoSphere.prototype.subdivide = function() {
     const srctris = this.triangles;
     const srcverts = this.vertices;
     const nsrctris = srctris.length / 3;
@@ -208,22 +208,22 @@ function clamp(v, least, most) {
 /// packSnorm16 ::function:: Converts a float in [-1, +1] into a half-float.
 /// value ::argument:: float
 /// ::retval:: half-float
-Filament.packSnorm16 = function(value) {
+Module.packSnorm16 = function(value) {
     return Math.round(clamp(value, -1.0, 1.0) * 32767.0);
 }
 
 /// loadMathExtensions ::function:: Extends the [glMatrix](http://glmatrix.net/) math library.
-/// Filament does not require its clients to use glMatrix, but if its usage is detected then
+/// Module does not require its clients to use glMatrix, but if its usage is detected then
 /// the [init] function will automatically call `loadMathExtensions`.
 /// This defines the following functions:
 /// - **vec4.packSnorm16** can be used to create half-floats (see [packSnorm16])
 /// - **mat3.fromRotation** now takes an arbitrary axis
-Filament.loadMathExtensions = function() {
+Module.loadMathExtensions = function() {
     vec4.packSnorm16 = function(out, src) {
-        out[0] = Filament.packSnorm16(src[0]);
-        out[1] = Filament.packSnorm16(src[1]);
-        out[2] = Filament.packSnorm16(src[2]);
-        out[3] = Filament.packSnorm16(src[3]);
+        out[0] = Module.packSnorm16(src[0]);
+        out[1] = Module.packSnorm16(src[1]);
+        out[2] = Module.packSnorm16(src[2]);
+        out[3] = Module.packSnorm16(src[3]);
         return out;
     }
     // In gl-matrix, mat3 rotation assumes rotation about the Z axis, so here we add a function
@@ -241,16 +241,16 @@ Filament.loadMathExtensions = function() {
 // Texture helpers
 // ---------------
 
-Filament._createTextureFromKtx = function(ktxdata, engine, options) {
+Module._createTextureFromKtx = function(ktxdata, engine, options) {
     options = options || {};
-    const ktx = options['ktx'] || new Filament.KtxBundle(ktxdata);
+    const ktx = options['ktx'] || new Module.KtxBundle(ktxdata);
     const srgb = !!options['srgb'];
-    return Filament.ktx$createTexture(engine, ktx, srgb);
+    return Module.ktx$createTexture(engine, ktx, srgb);
 };
 
-Filament._createIblFromKtx = function(ktxdata, engine, options) {
+Module._createIblFromKtx = function(ktxdata, engine, options) {
     options = options || {};
-    const iblktx = options['ktx'] = new Filament.KtxBundle(ktxdata);
+    const iblktx = options['ktx'] = new Module.KtxBundle(ktxdata);
 
     const format = iblktx.info().glInternalFormat;
     if (format != this.ctx.R11F_G11F_B10F && format != this.ctx.RGB16F && format != this.ctx.RGB32F) {
@@ -258,39 +258,39 @@ Filament._createIblFromKtx = function(ktxdata, engine, options) {
             ' which is not an expected floating-point format. Please use cmgen to generate IBL.');
     }
 
-    const ibltex = Filament._createTextureFromKtx(ktxdata, engine, options);
+    const ibltex = Module._createTextureFromKtx(ktxdata, engine, options);
     const shstring = iblktx.getMetadata("sh");
-    const ibl = Filament.IndirectLight.Builder()
+    const ibl = Module.IndirectLight.Builder()
         .reflections(ibltex)
         .build(engine);
     ibl.shfloats = shstring.split(/\s/, 9 * 3).map(parseFloat);
     return ibl;
 };
 
-Filament._createTextureFromImageFile = function(fileContents, engine, options) {
-    const Sampler = Filament.Texture$Sampler;
-    const TextureFormat = Filament.Texture$InternalFormat;
-    const PixelDataFormat = Filament.PixelDataFormat;
+Module._createTextureFromImageFile = function(fileContents, engine, options) {
+    const Sampler = Module.Texture$Sampler;
+    const TextureFormat = Module.Texture$InternalFormat;
+    const PixelDataFormat = Module.PixelDataFormat;
 
     options = options || {};
     const srgb = !!options['srgb'];
     const noalpha = !!options['noalpha'];
     const nomips = !!options['nomips'];
 
-    const decodedImage = Filament.decodeImage(fileContents, noalpha ? 3 : 4);
+    const decodedImage = Module.decodeImage(fileContents, noalpha ? 3 : 4);
 
     let texformat, pbformat, pbtype;
     if (noalpha) {
         texformat = srgb ? TextureFormat.SRGB8 : TextureFormat.RGB8;
         pbformat = PixelDataFormat.RGB;
-        pbtype = Filament.PixelDataType.UBYTE;
+        pbtype = Module.PixelDataType.UBYTE;
     } else {
         texformat = srgb ? TextureFormat.SRGB8_A8 : TextureFormat.RGBA8;
         pbformat = PixelDataFormat.RGBA;
-        pbtype = Filament.PixelDataType.UBYTE;
+        pbtype = Module.PixelDataType.UBYTE;
     }
 
-    const tex = Filament.Texture.Builder()
+    const tex = Module.Texture.Builder()
         .width(decodedImage.width)
         .height(decodedImage.height)
         .levels(nomips ? 1 : 0xff)
@@ -298,7 +298,7 @@ Filament._createTextureFromImageFile = function(fileContents, engine, options) {
         .format(texformat)
         .build(engine);
 
-    const pixelbuffer = Filament.PixelBuffer(decodedImage.data.getBytes(), pbformat, pbtype);
+    const pixelbuffer = Module.PixelBuffer(decodedImage.data.getBytes(), pbformat, pbtype);
     tex.setImage(engine, 0, pixelbuffer);
     if (!nomips) {
         tex.generateMipmaps(engine);
@@ -308,9 +308,9 @@ Filament._createTextureFromImageFile = function(fileContents, engine, options) {
 
 /// getSupportedFormats ::function:: Queries WebGL to check which compressed formats are supported.
 /// ::retval:: object with boolean values and the following keys: s3tc, astc, etc
-Filament.getSupportedFormats = function() {
-    if (Filament.supportedFormats) {
-        return Filament.supportedFormats;
+Module.getSupportedFormats = function() {
+    if (Module.supportedFormats) {
+        return Module.supportedFormats;
     }
     const options = { majorVersion: 2, minorVersion: 0 };
     let ctx = document.createElement('canvas').getContext('webgl2', options);
@@ -330,7 +330,7 @@ Filament.getSupportedFormats = function() {
             result.etc = true;
         }
     }
-    return Filament.supportedFormats = result;
+    return Module.supportedFormats = result;
 }
 
 /// getSupportedFormatSuffix ::function:: Generate a file suffix according to the texture format.
@@ -339,9 +339,9 @@ Filament.getSupportedFormats = function() {
 /// useful for compressed textures. For example, some platforms accept ETC and others accept S3TC.
 /// desiredFormats ::argument:: space-delimited string of desired formats
 /// ::retval:: empty string if there is no intersection of supported and desired formats.
-Filament.getSupportedFormatSuffix = function(desiredFormats) {
+Module.getSupportedFormatSuffix = function(desiredFormats) {
     desiredFormats = desiredFormats.split(' ');
-    let exts = Filament.getSupportedFormats();
+    let exts = Module.getSupportedFormats();
     for (let key in exts) {
         if (exts[key] && desiredFormats.includes(key)) {
             return '_' + key;

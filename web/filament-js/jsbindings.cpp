@@ -394,7 +394,7 @@ register_vector<const MaterialInstance*>("MaterialInstanceVector");
 class_<Engine>("Engine")
     .class_function("_create", (Engine* (*)()) [] {
         EM_ASM_INT({
-            const handle = GL.registerContext(Filament.glContext, Filament.glOptions);
+            const handle = GL.registerContext(Module.glContext, Module.glOptions);
             GL.makeContextCurrent(handle);
         });
         return Engine::create();

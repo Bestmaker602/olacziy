@@ -18,22 +18,25 @@ canvas     { position: absolute; width: 100%; height: 100%; }
     <canvas></canvas>
     <pre id="messages"></pre>
 </div>
-<script src="filament.js"></script>
 <script src="gl-matrix-min.js"></script>
 <script src="https://unpkg.com/gltumble"></script>
-<script>
+<script type="module">
+
+import LoadFilament from "./filament.js";
 
 const env = 'default_env';
 const ibl_url = `${env}/${env}_ibl.ktx`;
 const sky_url = `${env}/${env}_skybox.ktx`;
 const mesh_url = 'FlightHelmet.gltf';
 
-Filament.init([mesh_url, ibl_url, sky_url], () => {
-    window.gltfio = Filament.gltfio;
-    window.Fov = Filament.Camera$Fov;
-    window.LightType = Filament.LightManager$Type;
-    window.IndirectLight = Filament.IndirectLight;
-    window.app = new App(document.getElementsByTagName('canvas')[0]);
+LoadFilament({
+    assetUris: [mesh_url, ibl_url, sky_url],
+    onReady: () => {
+        window.Fov = Filament.Camera$Fov;
+        window.LightType = Filament.LightManager$Type;
+        window.IndirectLight = Filament.IndirectLight;
+        window.app = new App(document.getElementsByTagName('canvas')[0]);
+    }
 });
 
 class App {

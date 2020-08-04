@@ -14,75 +14,71 @@
  * limitations under the License.
  */
 
-/// init ::function:: Downloads assets, loads the Filament module, and invokes a callback when done.
+/// LoadFilament ::function:: Loads the Filament Module and optionally downloads assets.
 ///
-/// All JavaScript clients must call the init function, passing in a list of asset URL's and a
+/// All JavaScript clients must call LoadFilament function, passing in a list of asset URL's and a
 /// callback. This callback gets invoked only after all assets have been downloaded and the Filament
-/// WebAssembly module has been loaded. Clients should only pass asset URL's that absolutely must
+/// WebAssembly Module has been loaded. Clients should only pass asset URL's that absolutely must
 /// be ready at initialization time.
 ///
 /// When the callback is called, each downloaded asset is available in the `Filament.assets` global
 /// object, which contains a mapping from URL's to Uint8Array objects.
 ///
-/// assets ::argument:: Array of strings containing URL's of required assets.
-/// onready ::argument:: callback that gets invoked after all assets have been downloaded and the \
-/// Filament WebAssembly module has been loaded.
-Filament.init = (assets, onready) => {
-    onready = onready || (() => {});
-    Filament.assets = {};
+/// args.assetUris ::argument:: Array of strings containing URL's of required assets.
+/// args.onReady ::argument:: callback that gets invoked after all assets have been downloaded
+/// and the Filament WebAssembly Module has been loaded.
+
+Module.postRun = () => {
+
+    // TypeScript clients treat the module as a namespace, so we assign it to a global symbol.
+    window['Filament'] = Module;
+
+    // Add handwritten JavaScript wrappers into the module.
+    Module.loadClassExtensions();
 
     // Usage of glmatrix is optional. If it exists, then go ahead and augment it with some
     // useful math functions.
     if (typeof glMatrix !== 'undefined') {
-        Filament.loadMathExtensions();
+        Module.loadMathExtensions();
     }
 
-    // One task for compiling & loading the wasm file, plus one task for each asset.
-    let remainingTasks = 1 + assets.length;
-    const taskFinished = () => {
+    // This will hold the URI => Uint8Array map for downloaded assets.
+    Module.assets = Module.assets || {};
+
+    // Issue a fetch for each URI string.
+    const onReady = Module.onReady || (() => {});
+    const uris = Module.assetUris;
+    if (!uris) {
+        onReady();
+        return;
+    }
+    let remainingTasks = uris.length;
+    Module.fetch(uris, null, () => {
         if (--remainingTasks == 0) {
-            onready();
+            onReady();
         }
-    };
-
-    // Issue a fetch for each asset.
-    Filament.fetch(assets, null, taskFinished);
-
-    // Emscripten creates a global function called "Filament" that returns a promise that
-    // resolves to a module. Here we replace the function with the module. Note that our
-    // TypeScript bindings assume that Filament is a namespace, not a function.
-    Filament().then(module => {
-        Filament = Object.assign(module, Filament);
-
-        // At this point, emscripten has finished compiling and instancing the WebAssembly module.
-        // The JS classes that correspond to core Filament classes (e.g., Engine) are not guaranteed
-        // to exist until now.
-
-        Filament.loadClassExtensions();
-        taskFinished();
     });
 };
 
 /// fetch ::function:: Downloads assets and invokes a callback when done.
 ///
 /// This utility consumes an array of URI strings and invokes callbacks after each asset is
-/// downloaded. Additionally, each downloaded asset becomes available in the `Filament.assets`
+/// downloaded. Additionally, each downloaded asset becomes available in the `Module.assets`
 /// global object, which is a mapping from URI strings to `Uint8Array`. If desired, clients can
-/// pre-populate entries in `Filament.assets` to circumvent HTTP requests (this should be done after
-/// calling `Filament.init`).
+/// pre-populate entries in `Filament.assets` to circumvent HTTP requests.
 ///
-/// This function is used internally by `Filament.init` and `gltfio$FilamentAsset.loadResources`.
+/// This function is used internally by `LoadFilament` and `gltfio$FilamentAsset.loadResources`.
 ///
-/// assets ::argument:: Array of strings containing URL's of required assets.
+/// assetUris ::argument:: Array of strings containing URL's of required assets.
 /// onDone ::argument:: callback that gets invoked after all assets have been downloaded.
 /// onFetched ::argument:: optional callback that's invoked after each asset is downloaded.
-Filament.fetch = (assets, onDone, onFetched) => {
-    let remainingAssets = assets.length;
-    assets.forEach(name => {
+Module.fetch = (assetUris, onDone, onFetched) => {
+    let remainingAssets = assetUris.length;
+    assetUris.forEach(name => {
 
         // Check if a buffer already exists in case the client wishes
         // to provide its own data rather than using a HTTP request.
-        if (Filament.assets[name]) {
+        if (Module.assets[name]) {
             if (onFetched) {
                 onFetched(name);
             }
@@ -96,7 +92,7 @@ Filament.fetch = (assets, onDone, onFetched) => {
                 }
                 return response.arrayBuffer();
             }).then(arrayBuffer => {
-                Filament.assets[name] = new Uint8Array(arrayBuffer);
+                Module.assets[name] = new Uint8Array(arrayBuffer);
                 if (onFetched) {
                     onFetched(name);
                 }
