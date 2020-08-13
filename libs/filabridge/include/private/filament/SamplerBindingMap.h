@@ -48,7 +48,7 @@ public:
     // Assigns a range of finalized binding points to each sampler block.
     // If a per-material SIB is provided, then material samplers are also inserted (always at the
     // end). The optional material name is used for error reporting only.
-    void populate(const SamplerInterfaceBlock* perMaterialSib = nullptr,
+    void populate(uint8_t variantKey, const SamplerInterfaceBlock* perMaterialSib = nullptr,
             const char* materialName = nullptr);
 
     // Given a valid Filament binding point and an offset within the block, returns true and sets

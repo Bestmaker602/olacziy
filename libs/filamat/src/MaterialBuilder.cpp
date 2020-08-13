@@ -621,6 +621,12 @@ bool MaterialBuilder::generateShaders(const std::vector<Variant>& variants, Chun
             spirvEntry.variant = v.variant;
             metalEntry.variant = v.variant;
 
+            // Update the sampler bindings for this variant.
+            filament::SamplerBindingMap map;
+            map.populate(v.variant, &info.sib, mMaterialName.c_str());
+            MaterialInfo updatedMaterialInfo = info;
+            updatedMaterialInfo.samplerBindings = std::move(map);
+
             // Generate raw shader code.
             // The quotes in Google-style line directives cause problems with certain drivers. These
             // directives are optimized away when using the full filamat, so down below we
@@ -628,7 +634,7 @@ bool MaterialBuilder::generateShaders(const std::vector<Variant>& variants, Chun
             std::string shader;
             if (v.stage == filament::backend::ShaderType::VERTEX) {
                 shader = sg.createVertexProgram(
-                        shaderModel, targetApi, targetLanguage, info, v.variant,
+                        shaderModel, targetApi, targetLanguage, updatedMaterialInfo, v.variant,
                         mInterpolation, mVertexDomain);
 #ifdef FILAMAT_LITE
                 GLSLToolsLite glslTools;
@@ -636,7 +642,7 @@ bool MaterialBuilder::generateShaders(const std::vector<Variant>& variants, Chun
 #endif
             } else if (v.stage == filament::backend::ShaderType::FRAGMENT) {
                 shader = sg.createFragmentProgram(
-                        shaderModel, targetApi, targetLanguage, info, v.variant, mInterpolation);
+                        shaderModel, targetApi, targetLanguage, updatedMaterialInfo, v.variant, mInterpolation);
 #ifdef FILAMAT_LITE
                 GLSLToolsLite glslTools;
                 glslTools.removeGoogleLineDirectives(shader);
@@ -666,7 +672,7 @@ bool MaterialBuilder::generateShaders(const std::vector<Variant>& variants, Chun
 
             if (targetApi == TargetApi::OPENGL) {
                 if (targetLanguage == TargetLanguage::SPIRV) {
-                    sg.fixupExternalSamplers(shaderModel, shader, info);
+                    sg.fixupExternalSamplers(shaderModel, shader, updatedMaterialInfo);
                 }
 
                 glslEntry.stage = v.stage;
@@ -796,8 +802,13 @@ Package MaterialBuilder::build() noexcept {
         return Package::invalidPackage();
     }
 
+    // This needs to be updated per-variant.
     filament::SamplerBindingMap map;
-    map.populate(&info.sib, mMaterialName.c_str());
+    // Per-view Sampler bindings depend on the variant. We're fine using 0 here, because these
+    // sampler bindings are only used for writing the per-instance sampler bindings out to the
+    // material file.
+    const uint8_t variantKey = 0u;
+    map.populate(variantKey, &info.sib, mMaterialName.c_str());
     info.samplerBindings = std::move(map);
 
     // Create chunk tree.
@@ -832,7 +843,7 @@ const std::string MaterialBuilder::peek(filament::backend::ShaderType type,
     prepareToBuild(info);
 
     filament::SamplerBindingMap map;
-    map.populate(&info.sib, mMaterialName.c_str());
+    map.populate(0, &info.sib, mMaterialName.c_str());
     info.samplerBindings = std::move(map);
 
     if (type == filament::backend::ShaderType::VERTEX) {

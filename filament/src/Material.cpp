@@ -148,7 +148,8 @@ FMaterial::FMaterial(FEngine& engine, const Material::Builder& builder)
     assert(uibOK);
 
     // Populate sampler bindings for the backend that will consume this Material.
-    mSamplerBindings.populate(&mSamplerInterfaceBlock);
+    // TODO: this is hard-coded
+    mSamplerBindings.populate(0, &mSamplerInterfaceBlock);
 
     parser->getShading(&mShading);
     parser->getMaterialProperties(&mMaterialProperties);
@@ -347,7 +348,7 @@ backend::Handle<backend::HwProgram> FMaterial::getSurfaceProgramSlow(uint8_t var
                 UibGenerator::getPerRenderableBonesUib().getName());
     }
 
-    addSamplerGroup(pb, BindingPoints::PER_VIEW, SibGenerator::getPerViewSib(), mSamplerBindings);
+    addSamplerGroup(pb, BindingPoints::PER_VIEW, SibGenerator::getPerViewSib(variantKey), mSamplerBindings);
     addSamplerGroup(pb, BindingPoints::PER_MATERIAL_INSTANCE, mSamplerInterfaceBlock, mSamplerBindings);
 
     return createAndCacheProgram(std::move(pb), variantKey);

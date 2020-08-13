@@ -24,7 +24,7 @@
 
 namespace filament {
 
-void SamplerBindingMap::populate(const SamplerInterfaceBlock* perMaterialSib,
+void SamplerBindingMap::populate(uint8_t variantKey, const SamplerInterfaceBlock* perMaterialSib,
             const char* materialName) {
     uint8_t offset = 0;
     size_t maxSamplerIndex = backend::MAX_SAMPLER_COUNT - 1;
@@ -35,7 +35,7 @@ void SamplerBindingMap::populate(const SamplerInterfaceBlock* perMaterialSib,
         if (blockIndex == filament::BindingPoints::PER_MATERIAL_INSTANCE) {
             sib = perMaterialSib;
         } else {
-            sib = filament::SibGenerator::getSib(blockIndex);
+            sib = filament::SibGenerator::getSib(blockIndex, variantKey);
         }
         if (sib) {
             auto sibFields = sib->getSamplerInfoList();
@@ -66,7 +66,7 @@ void SamplerBindingMap::populate(const SamplerInterfaceBlock* perMaterialSib,
             if (blockIndex == filament::BindingPoints::PER_MATERIAL_INSTANCE) {
                 sib = perMaterialSib;
             } else {
-                sib = filament::SibGenerator::getSib(blockIndex);
+                sib = filament::SibGenerator::getSib(blockIndex, variantKey);
             }
             if (sib) {
                 auto sibFields = sib->getSamplerInfoList();
