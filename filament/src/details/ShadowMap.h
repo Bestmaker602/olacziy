@@ -71,6 +71,9 @@ public:
 
         Aabb wsShadowCastersVolume;
         Aabb wsShadowReceiversVolume;
+
+        // Position of the directional light in world space.
+        math::float3 wsLightPosition;
     };
 
     // Call once per frame to populate the CascadeParameters struct, then pass to update().

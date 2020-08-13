@@ -104,8 +104,42 @@ void ShadowMap::render(DriverApi& driver, Handle<HwRenderTarget> rt,
 void ShadowMap::computeSceneCascadeParams(const FScene::LightSoa& lightData, size_t index,
         FScene const* scene, filament::CameraInfo const& camera, uint8_t visibleLayers,
         CascadeParameters& cascadeParams) {
+    // Calculate the directional light's "position".
+    // For directional lights, we could choose any position; we pick the camera position
+    // so we have a fixed reference -- that's "not too far" from the scene. However, for VSM, we
+    // must pick a point that is TODO.
+    // Directional light's don't have a defined position, so we pick a point on the sphere that
+    // bounds the camera's culling frustum.
+    // TODO: if we're not doing VSM, we can use the camera's position and skip this calculation.
+    // const float3 lightPosition = camera.getPosition();
+    // TODO: hmm, are CascadeParams shared across a scene, or a view? Ah, they should be per-view.
+
+    // Calculate view frustum vertices in world-space.
+    // TODO: we're using viewingCameraInfo.cullingProjection here, but see line 158 of ShadowMap.cpp.
+    // Do we need to take shadowFar into account for this calculation?
+    float3 wsViewFrustumVertices[8];
+    computeFrustumCorners(wsViewFrustumVertices,
+            camera.model * FCamera::inverseProjection(camera.cullingProjection));
+
+    // Find the centroid of the frustum in world-space.
+    float3 wsCentroid { 0.0, 0.0, 0.0 };
+    for (float3 v : wsViewFrustumVertices) {
+        wsCentroid += v;
+    }
+    wsCentroid *= (1.0 / 8.0);
+
+    // Find the radius of the frustum's bounding sphere.
+    float wsRadius = 0.0f;
+    for (float3 v : wsViewFrustumVertices) {
+        float distance = length(v - wsCentroid);
+        wsRadius = max(wsRadius, distance);
+    }
+
+    const float3 l = lightData.elementAt<FScene::DIRECTION>(0); // guaranteed normalized
+    cascadeParams.wsLightPosition = wsCentroid - (l * wsRadius);
+
     // Compute the light's model matrix.
-    const float3 lightPosition = camera.getPosition();
+    const float3 lightPosition = cascadeParams.wsLightPosition;
     const float3 dir = lightData.elementAt<FScene::DIRECTION>(index);
     const mat4f M = mat4f::lookAt(lightPosition, lightPosition + dir, float3{ 0, 1, 0 });
     const mat4f Mv = FCamera::rigidTransformInverse(M);
@@ -216,10 +250,9 @@ void ShadowMap::computeShadowCameraDirectional(
      *
      * The light's model matrix contains the light position and direction.
      *
-     * For directional lights, we could choose any position; we pick the camera position
-     * so we have a fixed reference -- that's "not too far" from the scene.
+     * The directional light position is chosen inside computeSceneCascadeParams.
      */
-    const float3 lightPosition = camera.getPosition();
+    const float3 lightPosition = cascadeParams.wsLightPosition;
     const mat4f M = mat4f::lookAt(lightPosition, lightPosition + dir, float3{ 0, 1, 0 });
     const mat4f Mv = FCamera::rigidTransformInverse(M);
 

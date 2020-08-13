@@ -234,6 +234,9 @@ bool ShadowMapManager::updateCascadeShadowMaps(FEngine& engine, FView& view,
         const float normalBias = lcm.getShadowNormalBias(0);
         perViewUb.setUniform(offsetof(PerViewUib, shadowBias),
                 float3{0, normalBias * texelSizeWorldSpace, 0});
+
+        // Set the directional light position.
+        perViewUb.setUniform(offsetof(PerViewUib, lightPosition), cascadeParams.wsLightPosition);
     }
 
     // Adjust the near and far planes to tighly bound the scene.
