@@ -77,10 +77,11 @@ void ShadowMap::render(DriverApi& driver, Handle<HwRenderTarget> rt,
 
     // FIXME: in the future this will come from the framegraph
     RenderPassParams params = {};
-    params.flags.clear = TargetBufferFlags::DEPTH;
-    params.flags.discardStart = TargetBufferFlags::DEPTH;
-    params.flags.discardEnd = TargetBufferFlags::COLOR0 | TargetBufferFlags::STENCIL;
+    params.flags.clear = TargetBufferFlags::COLOR0 | TargetBufferFlags::DEPTH;
+    params.flags.discardStart = TargetBufferFlags::COLOR0 | TargetBufferFlags::DEPTH;
+    params.flags.discardEnd = TargetBufferFlags::STENCIL;
     params.clearDepth = 1.0;
+    params.clearColor = { 10000.0, 10000 * 10000.0, 0.0, 0.0 };
     params.viewport = viewport;
 
     FCamera const& camera = getCamera();

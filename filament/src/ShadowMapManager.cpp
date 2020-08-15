@@ -27,7 +27,7 @@ namespace filament {
 using namespace backend;
 using namespace math;
 
-ShadowMapManager::ShadowMapManager(FEngine& engine) : mTextureState(0, 0) {
+ShadowMapManager::ShadowMapManager(FEngine& engine) : mTextureState(0, 0, false) {
     for (size_t i = 0; i < mCascadeShadowMapCache.size(); i++) {
         mCascadeShadowMapCache[i] = std::make_unique<ShadowMap>(engine);
     }
@@ -91,7 +91,7 @@ void ShadowMapManager::prepare(FEngine& engine, DriverApi& driver, SamplerGroup&
 
     // If we already have a texture with the same dimensions and layer count, there's no need to
     // create a new one.
-    const TextureState newState(dim, layersNeeded);
+    const TextureState newState(dim, layersNeeded, mUseVsm);
     if (mTextureState == newState) {
         // nothing to do here.
         assert(mShadowMapTexture);
@@ -100,22 +100,42 @@ void ShadowMapManager::prepare(FEngine& engine, DriverApi& driver, SamplerGroup&
 
     // destroy the current rendertargets and texture
     destroyResources(driver);
+    utils::slog.d << "Creating a new texture" << utils::io::endl;
 
-    mShadowMapTexture = driver.createTexture(
-            SamplerType::SAMPLER_2D_ARRAY, 1, mTextureFormat, 1, dim, dim, layersNeeded,
-            TextureUsage::DEPTH_ATTACHMENT |TextureUsage::SAMPLEABLE);
+    // Shadows are either all PCF or all VSM.
+
+    if (mUseVsm) {
+        mVsmTexture = driver.createTexture(
+                SamplerType::SAMPLER_2D_ARRAY, 1, TextureFormat::RG32F, 1, dim, dim, layersNeeded,
+                TextureUsage::COLOR_ATTACHMENT | TextureUsage::SAMPLEABLE);
+    }
+    // for now, create both
+    //} else {
+        mShadowMapTexture = driver.createTexture(
+                SamplerType::SAMPLER_2D_ARRAY, 1, mTextureFormat, 1, dim, dim, layersNeeded,
+                TextureUsage::DEPTH_ATTACHMENT | TextureUsage::SAMPLEABLE);
+    //}
+
     mTextureState = newState;
 
     // Create a render target, one for each layer.
     for (uint16_t l = 0; l < layersNeeded; l++) {
+        const auto colorAttachment = mUseVsm ? MRT { mVsmTexture, 0, l } : MRT {};
+        const auto depthAttachment = TargetBufferInfo { mShadowMapTexture, 0, l };
         Handle<HwRenderTarget> rt = driver.createRenderTarget(
-                TargetBufferFlags::DEPTH, dim, dim, 1,
-                {}, { mShadowMapTexture, 0, l }, {});
+                TargetBufferFlags::DEPTH,       // targetbufferFlags
+                dim,                            // width
+                dim,                            // height
+                1,                              // samples
+                colorAttachment,                // color MRT (texture, level, layer)
+                depthAttachment,                // depth TargetBufferInfo (texture, level, layer)
+                {}                              // stencil TargetBufferInfo
+        );
         mRenderTargets.push_back(rt);
     }
 
     samplerGroup.setSampler(PerViewSib::SHADOW_MAP, {
-            mShadowMapTexture, {
+            mUseVsm ? mVsmTexture : mShadowMapTexture, {
                     .filterMag = SamplerMagFilter::LINEAR,
                     .filterMin = SamplerMinFilter::LINEAR,
                     .compareMode = SamplerCompareMode::COMPARE_TO_TEXTURE,
@@ -135,6 +155,10 @@ bool ShadowMapManager::update(FEngine& engine, FView& view, UniformBuffer& perVi
 void ShadowMapManager::reset() noexcept {
     mCascadeShadowMaps.clear();
     mSpotShadowMaps.clear();
+}
+
+void ShadowMapManager::setVsm(bool vsm) noexcept {
+    mUseVsm = vsm;
 }
 
 void ShadowMapManager::setShadowCascades(size_t lightIndex, size_t cascades) noexcept {
@@ -438,6 +462,11 @@ void ShadowMapManager::destroyResources(DriverApi& driver) noexcept {
     mRenderTargets.clear();
     if (mShadowMapTexture) {
         driver.destroyTexture(mShadowMapTexture);
+        mShadowMapTexture.clear();
+    }
+    if (mVsmTexture) {
+        driver.destroyTexture(mVsmTexture);
+        mVsmTexture.clear();
     }
 }
 

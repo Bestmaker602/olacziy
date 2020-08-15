@@ -53,6 +53,9 @@ public:
     // Reset shadow map layout.
     void reset() noexcept;
 
+    // Enable / disable VSM. Affects all shadows.
+    void setVsm(bool vsm) noexcept;
+
     void setShadowCascades(size_t lightIndex, size_t cascades) noexcept;
     void addSpotShadowMap(size_t lightIndex) noexcept;
 
@@ -115,12 +118,15 @@ private:
     struct TextureState {
         uint16_t size;
         uint8_t layers;
+        bool vsm;
 
-        TextureState(uint16_t size, uint8_t layers) : size(size), layers(layers) {}
+        TextureState(uint16_t size, uint8_t layers, bool vsm) :
+            size(size), layers(layers), vsm(vsm) {}
 
         bool operator==(const TextureState& rhs) const {
             return size == rhs.size &&
-                   layers == rhs.layers;
+                   layers == rhs.layers &&
+                   vsm == rhs.vsm;
         }
     } mTextureState;
 
@@ -169,7 +175,9 @@ private:
     backend::TextureFormat mTextureFormat = backend::TextureFormat::DEPTH16;
     float mTextureZResolution = 1.0f / (1u << 16u);
 
+    bool mUseVsm = false;
     backend::Handle<backend::HwTexture> mShadowMapTexture;
+    backend::Handle<backend::HwTexture> mVsmTexture;
     std::vector<backend::Handle<backend::HwRenderTarget>> mRenderTargets;
     std::vector<ShadowMapEntry> mCascadeShadowMaps;
     std::vector<ShadowMapEntry> mSpotShadowMaps;
