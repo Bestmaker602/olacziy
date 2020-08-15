@@ -108,7 +108,7 @@ void ShadowMapManager::prepare(FEngine& engine, DriverApi& driver, SamplerGroup&
 
     if (mUseVsm) {
         mVsmTexture = driver.createTexture(
-                SamplerType::SAMPLER_2D_ARRAY, 11, TextureFormat::RG32F, 1, dim, dim, layersNeeded,
+                SamplerType::SAMPLER_2D_ARRAY, engine.debug.shadowmap.hq_vsm ? 11 : 1, TextureFormat::RG32F, 1, dim, dim, layersNeeded,
                 TextureUsage::COLOR_ATTACHMENT | TextureUsage::SAMPLEABLE);
     }
     // for now, create both
@@ -121,6 +121,7 @@ void ShadowMapManager::prepare(FEngine& engine, DriverApi& driver, SamplerGroup&
     mTextureState = newState;
 
     // Create a render target, one for each layer.
+    const uint8_t samples = mUseVsm && engine.debug.shadowmap.hq_vsm ? 4 : 1;
     for (uint16_t l = 0; l < layersNeeded; l++) {
         const auto colorAttachment = mUseVsm ? MRT { mVsmTexture, 0, l } : MRT {};
         const auto depthAttachment = TargetBufferInfo { mShadowMapTexture, 0, l };
@@ -128,7 +129,7 @@ void ShadowMapManager::prepare(FEngine& engine, DriverApi& driver, SamplerGroup&
                 TargetBufferFlags::DEPTH,       // targetbufferFlags
                 dim,                            // width
                 dim,                            // height
-                1,                              // samples
+                samples,                        // samples
                 colorAttachment,                // color MRT (texture, level, layer)
                 depthAttachment,                // depth TargetBufferInfo (texture, level, layer)
                 {}                              // stencil TargetBufferInfo
@@ -136,9 +137,9 @@ void ShadowMapManager::prepare(FEngine& engine, DriverApi& driver, SamplerGroup&
         mRenderTargets.push_back(rt);
     }
 
-    if (engine.debug.shadowmap.hq_vsm) {
+    if (engine.debug.shadowmap.hq_vsm && mUseVsm) {
         samplerGroup.setSampler(PerViewSib::SHADOW_MAP, {
-                mUseVsm ? mVsmTexture : mShadowMapTexture, {
+                mVsmTexture, {
                         .filterMag = SamplerMagFilter::LINEAR,
                         .filterMin = SamplerMinFilter::LINEAR_MIPMAP_LINEAR,
                         .anisotropyLog2 = 3u,
