@@ -485,6 +485,7 @@ void SimpleViewer::updateUserInterface() {
         ImGui::Checkbox("Enable sunlight", &mEnableSunlight);
         ImGui::Checkbox("Enable shadows", &mEnableShadows);
         ImGui::Checkbox("Enable VSM", &mEnableVsm);
+        ImGui::Checkbox("HQ VSM", debug.getPropertyAddress<bool>("d.shadowmap.hq_vsm"));
         ImGui::SliderInt("Cascades", &mShadowCascades, 1, 4);
         ImGui::Checkbox("Debug Cascades", debug.getPropertyAddress<bool>("d.shadowmap.visualize_cascades"));
         ImGui::Checkbox("Enable contact shadows", &mEnableContactShadows);

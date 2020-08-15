@@ -119,14 +119,16 @@ private:
         uint16_t size;
         uint8_t layers;
         bool vsm;
+        bool hqVsm;
 
-        TextureState(uint16_t size, uint8_t layers, bool vsm) :
-            size(size), layers(layers), vsm(vsm) {}
+        TextureState(uint16_t size, uint8_t layers, bool vsm, bool hqVsm) :
+            size(size), layers(layers), vsm(vsm), hqVsm(hqVsm) {}
 
         bool operator==(const TextureState& rhs) const {
             return size == rhs.size &&
                    layers == rhs.layers &&
-                   vsm == rhs.vsm;
+                   vsm == rhs.vsm &&
+                   hqVsm == rhs.hqVsm;
         }
     } mTextureState;
 

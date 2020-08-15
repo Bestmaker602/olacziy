@@ -27,7 +27,7 @@ namespace filament {
 using namespace backend;
 using namespace math;
 
-ShadowMapManager::ShadowMapManager(FEngine& engine) : mTextureState(0, 0, false) {
+ShadowMapManager::ShadowMapManager(FEngine& engine) : mTextureState(0, 0, false, false) {
     for (size_t i = 0; i < mCascadeShadowMapCache.size(); i++) {
         mCascadeShadowMapCache[i] = std::make_unique<ShadowMap>(engine);
     }
@@ -39,6 +39,8 @@ ShadowMapManager::ShadowMapManager(FEngine& engine) : mTextureState(0, 0, false)
             &engine.debug.shadowmap.visualize_cascades);
     debugRegistry.registerProperty("d.shadowmap.tightly_bound_scene",
             &engine.debug.shadowmap.tightly_bound_scene);
+    debugRegistry.registerProperty("d.shadowmap.hq_vsm",
+            &engine.debug.shadowmap.hq_vsm);
 }
 
 ShadowMapManager::~ShadowMapManager() {
@@ -91,7 +93,7 @@ void ShadowMapManager::prepare(FEngine& engine, DriverApi& driver, SamplerGroup&
 
     // If we already have a texture with the same dimensions and layer count, there's no need to
     // create a new one.
-    const TextureState newState(dim, layersNeeded, mUseVsm);
+    const TextureState newState(dim, layersNeeded, mUseVsm, engine.debug.shadowmap.hq_vsm);
     if (mTextureState == newState) {
         // nothing to do here.
         assert(mShadowMapTexture);
@@ -106,7 +108,7 @@ void ShadowMapManager::prepare(FEngine& engine, DriverApi& driver, SamplerGroup&
 
     if (mUseVsm) {
         mVsmTexture = driver.createTexture(
-                SamplerType::SAMPLER_2D_ARRAY, 1, TextureFormat::RG32F, 1, dim, dim, layersNeeded,
+                SamplerType::SAMPLER_2D_ARRAY, 11, TextureFormat::RG32F, 1, dim, dim, layersNeeded,
                 TextureUsage::COLOR_ATTACHMENT | TextureUsage::SAMPLEABLE);
     }
     // for now, create both
@@ -134,13 +136,24 @@ void ShadowMapManager::prepare(FEngine& engine, DriverApi& driver, SamplerGroup&
         mRenderTargets.push_back(rt);
     }
 
-    samplerGroup.setSampler(PerViewSib::SHADOW_MAP, {
-            mUseVsm ? mVsmTexture : mShadowMapTexture, {
-                    .filterMag = SamplerMagFilter::LINEAR,
-                    .filterMin = SamplerMinFilter::LINEAR,
-                    .compareMode = SamplerCompareMode::COMPARE_TO_TEXTURE,
-                    .compareFunc = SamplerCompareFunc::LE
-            }});
+    if (engine.debug.shadowmap.hq_vsm) {
+        samplerGroup.setSampler(PerViewSib::SHADOW_MAP, {
+                mUseVsm ? mVsmTexture : mShadowMapTexture, {
+                        .filterMag = SamplerMagFilter::LINEAR,
+                        .filterMin = SamplerMinFilter::LINEAR_MIPMAP_LINEAR,
+                        .anisotropyLog2 = 3u,
+                        .compareMode = SamplerCompareMode::NONE,
+                        .compareFunc = SamplerCompareFunc::LE
+                }});
+    } else {
+        samplerGroup.setSampler(PerViewSib::SHADOW_MAP, {
+                mUseVsm ? mVsmTexture : mShadowMapTexture, {
+                        .filterMag = SamplerMagFilter::LINEAR,
+                        .filterMin = SamplerMinFilter::LINEAR,
+                        .compareMode = SamplerCompareMode::COMPARE_TO_TEXTURE,
+                        .compareFunc = SamplerCompareFunc::LE
+                }});
+    }
 }
 
 bool ShadowMapManager::update(FEngine& engine, FView& view, UniformBuffer& perViewUb,
@@ -213,6 +226,12 @@ void ShadowMapManager::render(FEngine& engine, FView& view, backend::DriverApi& 
         map.getShadowMap()->render(driver, mRenderTargets[currentRt], viewport,
                 view.getVisibleSpotShadowCasters(), pass, view);
         pass.clearVisibilityMask();
+    }
+
+    if (mUseVsm) {
+        if (engine.debug.shadowmap.hq_vsm) {
+            driver.generateMipmaps(mVsmTexture);
+        }
     }
 }
 

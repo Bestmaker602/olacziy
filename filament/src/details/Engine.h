@@ -386,6 +386,7 @@ public:
             bool lispsm = true;
             bool visualize_cascades = false;
             bool tightly_bound_scene = true;
+            bool hq_vsm = false;
             float dzn = -1.0f;
             float dzf =  1.0f;
         } shadowmap;
