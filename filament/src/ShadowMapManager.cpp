@@ -122,11 +122,16 @@ void ShadowMapManager::prepare(FEngine& engine, DriverApi& driver, SamplerGroup&
 
     // Create a render target, one for each layer.
     const uint8_t samples = mUseVsm && engine.debug.shadowmap.hq_vsm ? 4 : 1;
+    TargetBufferFlags flags = TargetBufferFlags::NONE;
+    flags |= TargetBufferFlags::DEPTH;
+    if (mUseVsm) {
+        flags |= TargetBufferFlags::COLOR0;
+    }
     for (uint16_t l = 0; l < layersNeeded; l++) {
         const auto colorAttachment = mUseVsm ? MRT { mVsmTexture, 0, l } : MRT {};
         const auto depthAttachment = TargetBufferInfo { mShadowMapTexture, 0, l };
         Handle<HwRenderTarget> rt = driver.createRenderTarget(
-                TargetBufferFlags::DEPTH,       // targetbufferFlags
+                flags,                          // targetbufferFlags
                 dim,                            // width
                 dim,                            // height
                 samples,                        // samples
