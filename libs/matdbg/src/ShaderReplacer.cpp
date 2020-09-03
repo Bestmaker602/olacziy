@@ -299,12 +299,12 @@ void ShaderIndex::encodeShadersToIndices() {
         offset += sizeof(ShaderRecord::stringLength);
         offset += sizeof(uint32_t);
 
-        const char* s = record.decodedShaderText.c_str();
-        size_t length = record.decodedShaderText.length();
-        for (size_t cur = 0; s[cur] != '\0'; cur++) {
+        const char* const s = record.decodedShaderText.c_str();
+        const size_t length = record.decodedShaderText.length();
+        for (size_t cur = 0; cur < length && s[cur] != '\0'; cur++) {
             size_t pos = cur;
             size_t len = 0;
-            while (s[cur] != '\n') {
+            while (cur != length && s[cur] != '\n') {
                 cur++;
                 len++;
             }
@@ -326,6 +326,7 @@ void ShaderIndex::encodeShadersToIndices() {
                 continue;
             }
             record.lineIndices.push_back(iter->second);
+            // note: here 'cur' can becomes > length (because of cur++ if it was equal to length)
         }
         offset += sizeof(uint16_t) * record.lineIndices.size();
     }
