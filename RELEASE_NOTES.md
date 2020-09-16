@@ -5,6 +5,8 @@ A new header is inserted each time a *tag* is created.
 
 ## Next release
 
+- New `ShadowOptions` control to render Variance Shadow Maps (VSM) with MSAA (experimental).
+
 ## v1.9.0
 
 - `MASKED` mode now leaves destination alpha intact (useful for transparent targets).
