@@ -495,7 +495,7 @@ void SimpleViewer::updateUserInterface() {
         ImGui::Checkbox("Enable shadows", &mEnableShadows);
         ImGui::Checkbox("Enable VSM", &mEnableVsm);
         char label[32];
-        sprintf(label, "%d", 1 << mVsmMsaaSamplesLog2);
+        snprintf(label, 32, "%d", 1 << mVsmMsaaSamplesLog2);
         ImGui::SliderInt("VSM MSAA samples", &mVsmMsaaSamplesLog2, 0, 3, label);
         ImGui::SliderInt("Cascades", &mShadowCascades, 1, 4);
         ImGui::Checkbox("Debug cascades", debug.getPropertyAddress<bool>("d.shadowmap.visualize_cascades"));
