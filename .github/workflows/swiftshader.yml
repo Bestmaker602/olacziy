@@ -11,12 +11,12 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Test PreBuilt Tree
-      uses: docker://ghcr.io/google/ssfilament
+      uses: docker://ghcr.io/prideout/filamentss
       with:
           entrypoint: ./filament/build.sh
           args: -u
     - name: Test Latest Tree
-      uses: docker://ghcr.io/google/ssfilament
+      uses: docker://ghcr.io/prideout/filamentss
       with:
           entrypoint: ./github/workspace/build.sh
           args: -u
