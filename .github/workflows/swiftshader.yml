@@ -1,9 +1,5 @@
 name: SwiftShader
 
-env:
-  SWIFTSHADER_LD_LIBRARY_PATH: swiftshader/build
-  SWIFTSHADER_SHA: 0f14b7ab7a550971c97090a7cd4b9910084fe7ea
-
 on: push
 # on:
 #   workflow_dispatch:
@@ -11,43 +7,16 @@ on: push
 jobs:
   swiftshader:
     name: Clone and Build SwiftShader
-    runs-on: ubuntu-16.04
-    #runs-on: macos-latest
-    steps:
-
-    - name: Check cache
-      id: cache-swiftshader
-      uses: actions/cache@v2
-      with:
-        path: swiftshader
-        key: swiftshader-${SWIFTSHADER_SHA}
-
-    - name: Clone SwiftShader
-      if: steps.cache.outputs.cache-hit != 'true'
-      run: |
-        git clone https://github.com/google/swiftshader --branch master --single-branch swiftshader
-
-    # SwiftShader takes a while to build; note thate it includes LLVM.
-    # We intentionally leave off the "-j" when invoking make.
-    # Seems to make the job more reliable (makes the output easier to follow too).
-    - name: Build SwiftShader
-      if: steps.cache.outputs.cache-hit != 'true'
-      working-directory: swiftshader
-      run: |
-        git config advice.detachedHead false
-        git checkout ${SWIFTSHADER_SHA}
-        cd build
-        cmake .. && make
-
-  filament:
-    name: Build Filament with SwiftShader support
     runs-on: ubuntu-latest
-    needs: swiftshader
     steps:
-    - uses: actions/checkout@v1
-    - name: Verify SwiftShader library
-      run: |
-        ls swiftshader/build
-    - name: Build Filament with SwiftShader support
-      run: |
-        ./build.sh -t release gltf_viewer
+    - uses: actions/checkout@v2
+    - name: Test PreBuilt Tree
+      uses: docker://docker.pkg.github.com/google/filament/swiftshader
+      with:
+          entrypoint: ./filament/build.sh
+          args: -u
+    - name: Test Latest Tree
+      uses: docker://docker.pkg.github.com/google/filament/swiftshader
+      with:
+          entrypoint: ./github/workspace/build.sh
+          args: -u
