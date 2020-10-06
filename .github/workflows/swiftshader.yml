@@ -10,7 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-    - uses: actions/checkout@v2
+    # This PAT only has `read:packages` enabled, and is saved as an Actions secret.
+    - name: Log into GitHub Container Registry
+      run: echo "${{ secrets.CR_PAT }}" | docker login https://ghcr.io -u ${{ github.actor }} --password-stdin
 
     - name: Download and Check PreBuilt Tree
       run: |
@@ -18,7 +20,7 @@ jobs:
           docker tag ghcr.io/prideout/filamentss.latest ssfilament
           docker run ssfilament filament/out/cmake-release/samples/gltf_viewer --batch default --headless -a vulkan
 
-    - name: Build and Test Latest Tree
+    - name: Build and Test Main
       run: |
           docker run ssfilament /bin/bash -c 'cd filament && git pull && ./build.sh -t release'
           docker run ssfilament filament/out/cmake-release/samples/gltf_viewer --batch default --headless -a vulkan
