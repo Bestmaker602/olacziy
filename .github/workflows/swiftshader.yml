@@ -9,12 +9,19 @@ jobs:
     name: Test Filament + Vulkan + SwiftShader
     runs-on: ubuntu-latest
     steps:
+
     - uses: actions/checkout@v2
+
+      # This PAT only has `read:packages` enabled, and is saved as an Actions secret.
+    - name: Log into GitHub Container Registry
+      run: echo "${{ secrets.CR_PAT }}" | docker login https://ghcr.io -u ${{ github.actor }} --password-stdin
+
     - name: Test PreBuilt Tree
       uses: docker://ghcr.io/prideout/filamentss
       with:
           entrypoint: ./filament/build.sh
           args: -u
+
     - name: Test Latest Tree
       uses: docker://ghcr.io/prideout/filamentss
       with:
