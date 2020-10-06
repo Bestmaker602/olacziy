@@ -6,17 +6,17 @@ on: push
 
 jobs:
   swiftshader:
-    name: Clone and Build SwiftShader
+    name: Test Filament + Vulkan + SwiftShader
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
     - name: Test PreBuilt Tree
-      uses: docker://docker.pkg.github.com/google/filament/swiftshader
+      uses: docker://ghcr.io/google/ssfilament
       with:
           entrypoint: ./filament/build.sh
           args: -u
     - name: Test Latest Tree
-      uses: docker://docker.pkg.github.com/google/filament/swiftshader
+      uses: docker://ghcr.io/google/ssfilament
       with:
           entrypoint: ./github/workspace/build.sh
           args: -u
