@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.android.filament.litcube
+package com.google.android.filament.rendertarget
 
 import android.animation.ValueAnimator
 import android.app.Activity
@@ -71,13 +71,6 @@ class MainActivity : Activity() {
     private lateinit var vertexBuffer: VertexBuffer
     private lateinit var indexBuffer: IndexBuffer
 
-    // A texture we will render into.
-    private lateinit var noiseTexture: Texture
-    private lateinit var noiseRenderTarget: RenderTarget
-    private lateinit var noiseView: View
-    private lateinit var noiseCamera: Camera
-    private lateinit var noiseScene: Scene
-
     // Filament entity representing a renderable object
     @Entity private var renderable = 0
     @Entity private var light = 0
@@ -104,7 +97,6 @@ class MainActivity : Activity() {
         setupFilament()
         setupView()
         setupScene()
-        setupRenderTarget()
     }
 
     private fun setupSurfaceView() {
@@ -189,28 +181,6 @@ class MainActivity : Activity() {
         camera.lookAt(0.0, 3.0, 4.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0)
 
         startAnimation()
-    }
-
-    private fun setupRenderTarget() {
-        noiseTexture = Texture.Builder()
-                .width(256)
-                .height(256)
-                .levels(1)
-                .usage(Texture.Usage.COLOR_ATTACHMENT.or(Texture.Usage.SAMPLEABLE))
-                .format(Texture.InternalFormat.RGBA8)
-                .build(engine)
-
-        noiseRenderTarget = RenderTarget.Builder()
-                .texture(RenderTarget.AttachmentPoint.COLOR, noiseTexture)
-                .build(engine)
-
-        // TODO: destroy
-        noiseScene = engine.createScene()
-        noiseCamera = engine.createCamera() // TODO: deprecated
-        noiseView = engine.createView()
-
-        noiseView.scene = noiseScene
-        noiseView.camera = noiseCamera
     }
 
     private fun loadMaterial() {
@@ -405,8 +375,6 @@ class MainActivity : Activity() {
         override fun doFrame(frameTimeNanos: Long) {
             // Schedule the next frame
             choreographer.postFrameCallback(this)
-
-            //println("BENJAMIN: schedule frame")
 
             // This check guarantees that we have a swap chain
             if (uiHelper.isReadyToRender) {
